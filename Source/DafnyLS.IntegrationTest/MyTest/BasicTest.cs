@@ -80,14 +80,22 @@ method DoIt() {
       // var documentItem = CreateTestDocument(source, Path.Combine(Directory.GetCurrentDirectory(), "MyTest/TestFiles/test.dfy"));
       var source = @"
 module module1 {
+  /*
     method foo() {
         assert 1 == 1;
         assert 2 == 2;
         assert 3 == 3;
         assert true;
         assert false;
+    }*/
+    method foo() {
+        assert 1 == 1;
+        assert 2 == 2;
+        assert 3 == 3;
+        var a := 2;
+        a := 3;
+        assert a == 3;
     }
-
     method bar() {
         assert 1 == 1;
         assert true;

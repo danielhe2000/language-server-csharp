@@ -3,6 +3,7 @@ using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
 using System;
 
 namespace Microsoft.Dafny.LanguageServer.Workspace {
@@ -34,9 +35,9 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       // OutputProgramInfo(program);
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
-      // OutputProgramInfo(program);
-      var serializedCounterExamples = await VerifyIfEnabled(textDocument, program, verify, cancellationToken);
       OutputProgramInfo(program);
+      var serializedCounterExamples = await VerifyIfEnabled(textDocument, program, verify, cancellationToken);
+      // OutputProgramInfo(program);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
 
@@ -74,20 +75,21 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
           if(callable.WhatKind == "method"){
             var MethodCallable = (Method)callable;
             var Body = MethodCallable.methodBody;
+            Console.WriteLine("     Callable "+callable_count+" #statement " + Body.Body.Count);
+            // Try to remove the last assertion of foo
+            /*
+            if(callable.NameRelativeToModule == "foo"){
+              Body.Body.Remove(Body.Body.Last());
+              Console.WriteLine("     Callable "+callable_count+" #statement after deletion " + Body.Body.Count);
+            }*/
+            /*
+            if(callable.NameRelativeToModule == "foo"){
+              Body.Body.Remove(Body.Body[Body.Body.Count - 2]);
+              Console.WriteLine("     Callable "+callable_count+" #statement after deletion " + Body.Body.Count);
+            }*/
+            /*
             for(int i = 0; i < Body.Body.Count; ++ i){
               var Stm = Body.Body[i];
-              /*
-              if(Stm == null){
-                Console.WriteLine("Fuck, statement null!");
-                continue;
-              }
-              if(Stm.Attributes == null){
-                Console.WriteLine("Fuck, statement attrubute null!");
-              }*/
-              /*
-              Console.WriteLine("       Callable "+callable_count+" statement " + i + " attribute name " + Stm.Attributes.Name);
-              Console.WriteLine("       Callable "+callable_count+" statement " + i + " attribute size " + Stm.Attributes.Args.Count);
-              /*
               var Lbls = Stm.Labels;
               bool not_null = Lbls != null;
               Console.WriteLine("       Callable "+callable_count+" statement " + i + " label count " + LList<Label>.Count(Lbls));
@@ -100,8 +102,8 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
               }
               if(not_null){
                 Console.WriteLine();
-              }*/
-            }
+              }
+            }*/
           }
           ++ callable_count;
         }
