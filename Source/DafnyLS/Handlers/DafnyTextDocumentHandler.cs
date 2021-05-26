@@ -57,6 +57,7 @@ namespace Microsoft.Dafny.LanguageServer.Handlers {
 
     public override async Task<Unit> Handle(DidChangeTextDocumentParams notification, CancellationToken cancellationToken) {
       _logger.LogTrace("received change notification {}", notification.TextDocument.Uri);
+      // notification is the change of the document
       var document = await _documents.UpdateDocumentAsync(notification, cancellationToken);
       if(document != null) {
         _diagnosticPublisher.PublishDiagnostics(document, cancellationToken);

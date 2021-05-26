@@ -11,6 +11,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System;
+using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Microsoft.Dafny.LanguageServer.IntegrationTest.Synchronization {
   [TestClass]
@@ -556,8 +558,12 @@ method Multiply(x: int, y: int) returns (product: int)
       var saveReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
       var saveDiagnostics = saveReport.Diagnostics.ToArray();
       Assert.AreEqual(1, saveDiagnostics.Length);
-      Assert.AreEqual("Other", saveDiagnostics[0].Source);
-      Assert.AreEqual(DiagnosticSeverity.Error, saveDiagnostics[0].Severity);
+      var FirstDiagnostic = saveDiagnostics[0];
+      Assert.AreEqual("Other", FirstDiagnostic.Source);
+      Assert.AreEqual(DiagnosticSeverity.Error, FirstDiagnostic.Severity);
+      Console.WriteLine(FirstDiagnostic.Message);
+      Console.WriteLine(FirstDiagnostic.Range.Start);
+      Console.WriteLine(FirstDiagnostic.Range.End);
     }
 
     public class TestDiagnosticReceiver {
