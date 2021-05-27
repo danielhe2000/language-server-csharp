@@ -75,47 +75,62 @@ method DoIt() {
     }
 
     [TestMethod]
-    public async Task TryDiagnosticReceiver() {
+    public async Task BasicProgramPrinterTest() {
       // var source = "include \"ModuleTest.dfy\"";
       // var documentItem = CreateTestDocument(source, Path.Combine(Directory.GetCurrentDirectory(), "MyTest/TestFiles/test.dfy"));
       var source = @"
 module module1 {
-  /*
-    method foo() {
+    lemma foo() {
+        bar();
         assert 1 == 1;
-        assert 2 == 2;
-        assert 3 == 3;
-        assert true;
-        assert false;
-    }*/
-    method foo() {
-        assert 1 == 1;
-        assert 2 == 2;
-        assert 3 == 3;
         var a := 2;
-        a := 3;
+        a := 4;
         assert a == 3;
     }
-    method bar() {
-        assert 1 == 1;
+    lemma bar() {
         assert true;
-        foo();
     }
-}
-/*
-module module2 {
-    method foo() {
-        assert 1 == 1;
-        assert true;
-        assert false;
+}".Trim();
+    var documentItem = CreateTestDocument(source);
+      await SetUp(new Dictionary<string, string>() {
+        { $"{DocumentOptions.Section}:{nameof(DocumentOptions.Verify)}", nameof(AutoVerification.OnSave) }
+      });
+      
+      _client.OpenDocument(documentItem);
+      var changeReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
+      var changeDiagnostics = changeReport.Diagnostics.ToArray();
+      Assert.AreEqual(0, changeDiagnostics.Length);
+      _client.SaveDocument(documentItem);
+      var saveReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
+      var saveDiagnostics = saveReport.Diagnostics.ToArray();
+      Console.WriteLine("Number of errors: " + saveDiagnostics.Length);
+      for(int i = 0; i < saveDiagnostics.Length; ++i){
+        var FirstDiagnostic = saveDiagnostics[i];
+        Assert.AreEqual("Other", FirstDiagnostic.Source);
+        Assert.AreEqual(DiagnosticSeverity.Error, FirstDiagnostic.Severity);
+        Console.WriteLine(FirstDiagnostic.Message);
+        Console.WriteLine(FirstDiagnostic.Range.Start);
+        Console.WriteLine(FirstDiagnostic.Range.End);
+      }
     }
 
-    method bar() {
+    [TestMethod]
+    public async Task ProgramWithSubStatementPrinterTest() {
+      // var source = "include \"ModuleTest.dfy\"";
+      // var documentItem = CreateTestDocument(source, Path.Combine(Directory.GetCurrentDirectory(), "MyTest/TestFiles/test.dfy"));
+      var source = @"
+module module1 {
+    lemma foo() {
         assert 1 == 1;
-        assert true;
-        foo();
+        {
+          assert true;
+          assert 2 == 3;
+        }
+        var a := 2;
+        a := 4;
+        assert a == 3;
     }
-}*/".Trim();
+}".Trim();
     var documentItem = CreateTestDocument(source);
       await SetUp(new Dictionary<string, string>() {
         { $"{DocumentOptions.Section}:{nameof(DocumentOptions.Verify)}", nameof(AutoVerification.OnSave) }
