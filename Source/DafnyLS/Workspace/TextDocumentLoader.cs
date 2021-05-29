@@ -46,7 +46,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       // var serializedCounterExamples = await VerifyTwiceWithModificationFirst(textDocument, program, verify, cancellationToken);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);*/
       if(verify){
-        return await GenerateProgramAssertionTestBasic(textDocument ,cancellationToken);
+        return await GenerateProgram(textDocument ,cancellationToken);
       }
       else{
         return await GenerateProgramWithoutVerify(textDocument, cancellationToken);
@@ -108,6 +108,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
+      // DocumentPrinter.OutputProgramInfo(program);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, null);
     }
 

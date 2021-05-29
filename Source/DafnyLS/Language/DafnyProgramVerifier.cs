@@ -42,6 +42,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           //      A dash means write to the textwriter instead of a file.
           // https://github.com/boogie-org/boogie/blob/b03dd2e4d5170757006eef94cbb07739ba50dddb/Source/VCGeneration/Couterexample.cs#L217
           DafnyOptions.O.ModelViewFile = "-";
+          DafnyOptions.O.TimeLimit = 5;
           _initialized = true;
           logger.LogTrace("initialized the boogie verifier...");
         }
@@ -75,7 +76,10 @@ namespace Microsoft.Dafny.LanguageServer.Language {
     private void VerifyWithBoogie(Boogie.Program program, CancellationToken cancellationToken) {
       program.Resolve();
       program.Typecheck();
-
+      
+      // var cmdOption = new CommandLineOptions();
+      // cmdOption.TimeLimit = 10;
+      // CommandLineOptions.Install(cmdOption);
       ExecutionEngine.EliminateDeadVariables(program);
       ExecutionEngine.CollectModSets(program);
       ExecutionEngine.CoalesceBlocks(program);

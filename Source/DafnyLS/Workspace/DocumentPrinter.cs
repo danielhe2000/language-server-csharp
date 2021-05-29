@@ -15,14 +15,16 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             for(int i = 0; i < IndentLvl; ++i){
                 Indent += "  ";
             }
-            Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " #expression " + SubExps.Count());
+            Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " type " + GetStatementType(Stm));
+            // Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " #expression " + SubExps.Count());
+            /*
             if(SubExps.Count() > 0){
                 var ExpsCount = 0;
                 foreach(var Sub in SubExps){
                     Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " expression" + ExpsCount + " is " + Sub.Type.AsText());
                     ++ExpsCount;
                 }
-            }
+            }*/
             Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " #substatements " + SubStms.Count());
             
             if(SubStms.Count() > 0){
@@ -106,26 +108,26 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             } else if (stmt is AssignStmt) {
                 return "Assign Statement";
             } else if (stmt is DividedBlockStmt) {
-                return "Divided Block Statement";
+                return "Divided Block Statement";   // Can be continued
             } else if (stmt is BlockStmt) {
-                return "Block Statement";
+                return "Block Statement";           // Can be continued
             } else if (stmt is IfStmt) {
-                return "If Statement";
+                return "If Statement";              // Can be continued (if has a block)
             } else if (stmt is AlternativeStmt) {
                 return "Alternative Statement";
             } else if (stmt is WhileStmt) {
-                return "While Statement";
+                return "While Statement";           // Can be continued (if has a block)
             } else if (stmt is AlternativeLoopStmt) {
                 return "Alternative Loop Statement";
             } else if (stmt is ForallStmt) {
-                return "Forall Statement";
+                return "Forall Statement";          // Can be continued (if has a block)
             } else if (stmt is CalcStmt) {
                 return "Calc Statement";
                 // calc statements have the unusual property that the last line is duplicated.  If that is the case (which
                 // we expect it to be here), we share the clone of that line as well.
             } else if (stmt is NestedMatchStmt) {
                 return "Nested Match Statement";
-            } else if (stmt is MatchStmt) {
+            } else if (stmt is MatchStmt) {         // Need to double check on this. Must check if this can continue
                 return "Match Statement";
             } else if (stmt is AssignSuchThatStmt) {
                 return "Assugn Such-that Statement";
