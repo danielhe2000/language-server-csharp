@@ -26,6 +26,7 @@ namespace Microsoft.Dafny.LanguageServer {
         .WithDafnyHandlers()
         .OnInitialize(Initialize)
         .OnStarted(Started);
+        //.WithMaximumRequestTimeout(System.TimeSpan.FromMilliseconds(10));
     }
 
     private static Task Initialize(ILanguageServer server, InitializeParams request, CancellationToken cancellationToken) {

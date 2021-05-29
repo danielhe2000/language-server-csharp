@@ -8,7 +8,7 @@ using System;
 
 namespace Microsoft.Dafny.LanguageServer.Workspace{
     public class DocumentPrinter{
-        private static void PrintStatementInfo(Statement Stm, string Parent, int StmtCount, int IndentLvl){
+        public static void PrintStatementInfo(Statement Stm, string Parent, int StmtCount, int IndentLvl){
             var SubExps = Stm.SubExpressions;
             var SubStms = Stm.SubStatements;
             string Indent = "";
@@ -19,8 +19,8 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             if(SubExps.Count() > 0){
                 var ExpsCount = 0;
                 foreach(var Sub in SubExps){
-                Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " expression" + ExpsCount + " is " + Sub.Type.AsText());
-                ++ExpsCount;
+                    Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " expression" + ExpsCount + " is " + Sub.Type.AsText());
+                    ++ExpsCount;
                 }
             }
             Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " #substatements " + SubStms.Count());
@@ -28,7 +28,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             if(SubStms.Count() > 0){
                 var SubStmtCount = 0;
                 foreach(var Sub in SubStms){
-                PrintStatementInfo(Sub, Parent + " statement" + StmtCount, SubStmtCount, IndentLvl + 1);
+                    PrintStatementInfo(Sub, Parent + " statement" + StmtCount, SubStmtCount, IndentLvl + 1);
                 }
                 ++ SubStmtCount;
             }
@@ -48,11 +48,11 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 Console.WriteLine("     Callable "+CallableCount+" name: " + callable.NameRelativeToModule);
                 Console.WriteLine("     Callable "+CallableCount+" #succesor: " + corresVertex.Successors.Count);
                 if(callable.WhatKind == "lemma"){
-                    var MethodCallable = (Method)callable;
-                    var Body = MethodCallable.methodBody;
+                    var LemmaCallable = (Lemma)callable;
+                    var Body = LemmaCallable.methodBody;
                     Console.WriteLine("     Callable "+CallableCount+" #statement " + Body.Body.Count);
                     for(int i = 0; i < Body.Body.Count; ++ i){
-                    PrintStatementInfo(Body.Body[i], "Callable "+CallableCount, i, 0);
+                        PrintStatementInfo(Body.Body[i], "Callable "+CallableCount, i, 0);
                     }
                 }
                 ++ CallableCount;
@@ -82,6 +82,65 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 Console.WriteLine("Error Message" + errorCount + " location: " + message.token.GetLspRange().Start + " to " + message.token.GetLspRange().End);
                 Console.WriteLine("Error Message" + errorCount + " source: " + message.source.ToString());
                 ++errorCount;
+            }
+            Console.WriteLine("************** Error message printed!!! **************");
+        }
+
+        public static string GetStatementType(Statement stmt){
+            if (stmt is AssertStmt) {
+                return "Assert Statement";
+            } else if (stmt is ExpectStmt) {
+                return "Expect Statement";
+            } else if (stmt is AssumeStmt) {
+                return "Assume Statement";
+            } else if (stmt is PrintStmt) {
+                return "Print Statement";
+            } else if (stmt is RevealStmt) {
+                return "Reveal Statement";
+            } else if (stmt is BreakStmt) {
+                return "Break Statement";
+            } else if (stmt is ReturnStmt) {
+                return "Return Statement";
+            } else if (stmt is YieldStmt) {
+                return "Yield Statement";
+            } else if (stmt is AssignStmt) {
+                return "Assign Statement";
+            } else if (stmt is DividedBlockStmt) {
+                return "Divided Block Statement";
+            } else if (stmt is BlockStmt) {
+                return "Block Statement";
+            } else if (stmt is IfStmt) {
+                return "If Statement";
+            } else if (stmt is AlternativeStmt) {
+                return "Alternative Statement";
+            } else if (stmt is WhileStmt) {
+                return "While Statement";
+            } else if (stmt is AlternativeLoopStmt) {
+                return "Alternative Loop Statement";
+            } else if (stmt is ForallStmt) {
+                return "Forall Statement";
+            } else if (stmt is CalcStmt) {
+                return "Calc Statement";
+                // calc statements have the unusual property that the last line is duplicated.  If that is the case (which
+                // we expect it to be here), we share the clone of that line as well.
+            } else if (stmt is NestedMatchStmt) {
+                return "Nested Match Statement";
+            } else if (stmt is MatchStmt) {
+                return "Match Statement";
+            } else if (stmt is AssignSuchThatStmt) {
+                return "Assugn Such-that Statement";
+            } else if (stmt is UpdateStmt) {
+                return "Update Statement";
+            } else if (stmt is AssignOrReturnStmt) {
+                return "Assign or Return Statement";
+            } else if (stmt is VarDeclStmt) {
+                return "Variable Declaration Statement";
+            } else if (stmt is VarDeclPattern) {
+                return "Variable Declaration Pattern";
+            } else if (stmt is ModifyStmt) {
+                return "Modify Statement";
+            } else {
+                return "Unexpected Statement";
             }
         }
     }

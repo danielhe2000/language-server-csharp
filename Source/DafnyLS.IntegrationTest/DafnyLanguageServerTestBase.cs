@@ -21,7 +21,8 @@ namespace Microsoft.Dafny.LanguageServer.IntegrationTest {
 
     public IDocumentDatabase Documents => Server.GetRequiredService<IDocumentDatabase>();
 
-    public DafnyLanguageServerTestBase() : base(new JsonRpcTestOptions(LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning)))) { }
+    public DafnyLanguageServerTestBase() : base(new JsonRpcTestOptions(LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning)))
+                                                    .WithTestTimeout(System.TimeSpan.FromSeconds(50))) { }
 
     protected override (Stream clientOutput, Stream serverInput) SetupServer() {
       var clientPipe = new Pipe(TestOptions.DefaultPipeOptions);
@@ -32,6 +33,7 @@ namespace Microsoft.Dafny.LanguageServer.IntegrationTest {
           .WithOutput(clientPipe.Writer)
           .ConfigureLogging(SetupTestLogging)
           .WithDafnyLanguageServer(CreateConfiguration())
+          // .WithMaximumRequestTimeout(System.TimeSpan.FromMilliseconds(1000))
       );
       Server.Initialize(CancellationToken);
       return (clientPipe.Reader.AsStream(), serverPipe.Writer.AsStream());

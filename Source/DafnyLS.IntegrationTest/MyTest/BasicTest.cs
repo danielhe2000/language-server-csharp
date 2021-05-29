@@ -19,6 +19,7 @@ namespace Microsoft.Dafny.LanguageServer.IntegrationTest.Synchronization {
   [TestClass]
   public class MyTest : DafnyLanguageServerTestBase {
     private ILanguageClient _client;
+    private const int MaxTestExecutionTimeMs = 30000;
     private TestDiagnosticReceiver _diagnosticReceiver;
     private IDictionary<string, string> _configuration;
 
@@ -151,6 +152,44 @@ module module1 {
         Console.WriteLine(FirstDiagnostic.Message);
         Console.WriteLine(FirstDiagnostic.Range.Start);
         Console.WriteLine(FirstDiagnostic.Range.End);
+      }
+    }
+
+    [TestMethod]
+    [Timeout(MaxTestExecutionTimeMs)]
+    public async Task VerySimpleCloningTest() {
+      var source = @"
+module module1 {
+    lemma foo() {
+        assert false;
+        assert 1 == 1;
+        assert true;
+        assert 2 == 2;
+        assert true;
+        assert 3 == 3;
+    }
+}".Trim();
+    //var documentItem = await CreateTextDocumentFromFileAsync("GenericSort.dfy");
+      var documentItem = CreateTestDocument(source);
+      await SetUp(new Dictionary<string, string>() {
+        { $"{DocumentOptions.Section}:{nameof(DocumentOptions.Verify)}", nameof(AutoVerification.OnSave) }
+      });
+      
+      _client.OpenDocument(documentItem);
+      var changeReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
+      var changeDiagnostics = changeReport.Diagnostics.ToArray();
+      Assert.AreEqual(0, changeDiagnostics.Length);
+      _client.SaveDocument(documentItem);
+      var saveReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
+      var saveDiagnostics = saveReport.Diagnostics.ToArray();
+      Console.WriteLine("Number of errors: " + saveDiagnostics.Length);
+      for(int i = 0; i < saveDiagnostics.Length; ++i){
+        var Diagnostic = saveDiagnostics[i];
+        Assert.AreEqual("Other", Diagnostic.Source);
+        Assert.AreEqual(DiagnosticSeverity.Error, Diagnostic.Severity);
+        Console.WriteLine(Diagnostic.Message);
+        Console.WriteLine(Diagnostic.Range.Start);
+        Console.WriteLine(Diagnostic.Range.End);
       }
     }
 
