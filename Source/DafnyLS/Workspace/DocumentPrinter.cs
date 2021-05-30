@@ -1,6 +1,7 @@
 using Microsoft.Dafny.LanguageServer.Language;
 using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
@@ -78,14 +79,14 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
     
         public static void OutputErrorInfo(ErrorReporter errorReporter){
             int errorCount = 0;
-            Console.WriteLine("************** Print error message!!! **************");
+            Console.WriteLine(">>>>>>>>>>>>>>>>> Print error message!!! <<<<<<<<<<<<<<<<<<<<");
             foreach(var message in errorReporter.AllMessages[ErrorLevel.Error]){
                 Console.WriteLine("Error Message" + errorCount + " message: " + message.message);
                 Console.WriteLine("Error Message" + errorCount + " location: " + message.token.GetLspRange().Start + " to " + message.token.GetLspRange().End);
                 Console.WriteLine("Error Message" + errorCount + " source: " + message.source.ToString());
                 ++errorCount;
             }
-            Console.WriteLine("************** Error message printed!!! **************");
+            Console.WriteLine(">>>>>>>>>>>>>>>>> Error message printed!!! <<<<<<<<<<<<<<<<<");
         }
 
         public static string GetStatementType(Statement stmt){
@@ -108,7 +109,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             } else if (stmt is AssignStmt) {
                 return "Assign Statement";
             } else if (stmt is DividedBlockStmt) {
-                return "Divided Block Statement";   // Can be continued
+                return "Divided Block Statement";   
             } else if (stmt is BlockStmt) {
                 return "Block Statement";           // Can be continued
             } else if (stmt is IfStmt) {
@@ -125,7 +126,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 return "Calc Statement";
                 // calc statements have the unusual property that the last line is duplicated.  If that is the case (which
                 // we expect it to be here), we share the clone of that line as well.
-            } else if (stmt is NestedMatchStmt) {
+            } else if (stmt is NestedMatchStmt) {   // In fact, the match statements are interpreted as this, so this will count
                 return "Nested Match Statement";
             } else if (stmt is MatchStmt) {         // Need to double check on this. Must check if this can continue
                 return "Match Statement";
@@ -145,5 +146,74 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 return "Unexpected Statement";
             }
         }
+    
+        public static int GetStatementCount(Dafny.Program program, string ModuleName, string LemmaName){
+            foreach(ModuleDefinition module in program.ModuleSigs.Keys){
+                if(module.FullName != ModuleName) continue;
+                foreach(ICallable callable in module.CallGraph.vertices.Keys){
+                    if(callable.WhatKind != "lemma" || callable.NameRelativeToModule != LemmaName) continue;
+                    var LemmaCallable = (Lemma)callable;
+                    var Body = LemmaCallable.Body.Body;
+                    return GetStatementCountHelper(Body);
+                }
+            }
+            return 0;
+        }
+
+        private static int GetStatementCountHelper(IEnumerable<Statement> Body){
+            int result = 0;
+            foreach(var Stm in Body){
+                if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt){
+                    result += GetStatementCountHelper(Stm.SubStatements);
+                }
+                else{
+                    result += 1;
+                }
+            }
+            return result;
+        }
+
+        public static Statement GetStatement(Dafny.Program program, string ModuleName, string LemmaName, int Location){
+            foreach(ModuleDefinition module in program.ModuleSigs.Keys){
+                if(module.FullName != ModuleName) continue;
+                foreach(ICallable callable in module.CallGraph.vertices.Keys){
+                    if(callable.WhatKind != "lemma" || callable.NameRelativeToModule != LemmaName) continue;
+                    var LemmaCallable = (Lemma)callable;
+                    var Body = LemmaCallable.Body.Body;
+                    var End = GetStatementHelper(Body, Location, out var Result);
+                    return Result;
+                }
+            }
+            return null;
+        }
+        
+        private static int GetStatementHelper(IEnumerable<Statement> Body, int Location, out Statement Result){
+            Result = null;
+            foreach(var Stm in Body){
+                if(Location == 0) {
+                    if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt){
+                        Location = GetStatementHelper(Stm.SubStatements, Location, out Result);
+                        if(Result != null){
+                            return 0;
+                        }
+                    }
+                    else{
+                        Result = Stm;
+                        return 0;
+                    }
+                }
+                if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt){
+                    Location = GetStatementHelper(Stm.SubStatements, Location, out Result);
+                    if(Location == 0 && Result != null){
+                        return 0;
+                    }
+                }
+                else{
+                    -- Location;
+                }
+            }
+            return Location;
+        }
+
     }
 }

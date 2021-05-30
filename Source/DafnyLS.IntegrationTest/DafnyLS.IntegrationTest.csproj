@@ -49,6 +49,9 @@
     <None Include="MyTest\TestFiles\NestedStatement.dfy" Link="MyTest\TestFiles\NestedStatement.dfy">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="MyTest\TestFiles\AdvancedRemoval.dfy" Link="MyTest\TestFiles\AdvancedRemoval.dfy">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="MyTest\TestFiles\Timeouts.dfy" Link="MyTest\TestFiles\Timeouts.dfy">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

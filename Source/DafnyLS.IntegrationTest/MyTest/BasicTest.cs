@@ -211,20 +211,38 @@ module module1 {
         Console.WriteLine(Diagnostic.Range.Start);
         Console.WriteLine(Diagnostic.Range.End);
       }
-      // Assert.AreEqual(0, changeDiagnostics.Length);
+    }
+
+    [TestMethod]
+    [Timeout(MaxTestExecutionTimeMs)]
+    public async Task AdvancedRemovalTest() {
+      var filePath = Path.Combine("MyTest", "TestFiles", "AdvancedRemoval.dfy");
+      var source = await File.ReadAllTextAsync(filePath, CancellationToken);
+      var documentItem = CreateTestDocument(source);
+      await SetUp(new Dictionary<string, string>() {
+        { $"{DocumentOptions.Section}:{nameof(DocumentOptions.Verify)}", nameof(AutoVerification.OnSave) }
+      });
+      _client.OpenDocument(documentItem);
+      var changeReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
       /*
+      var changeDiagnostics = changeReport.Diagnostics.ToArray();
+      for(int i = 0; i < changeDiagnostics.Length; ++i){
+        var Diagnostic = changeDiagnostics[i];
+        Console.WriteLine(Diagnostic.Message);
+        Console.WriteLine(Diagnostic.Range.Start);
+        Console.WriteLine(Diagnostic.Range.End);
+      }*/
       _client.SaveDocument(documentItem);
       var saveReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
       var saveDiagnostics = saveReport.Diagnostics.ToArray();
       Console.WriteLine("Number of errors: " + saveDiagnostics.Length);
       for(int i = 0; i < saveDiagnostics.Length; ++i){
         var Diagnostic = saveDiagnostics[i];
-        Assert.AreEqual("Other", Diagnostic.Source);
-        Assert.AreEqual(DiagnosticSeverity.Error, Diagnostic.Severity);
+        if(Diagnostic.Severity != DiagnosticSeverity.Error) continue;
         Console.WriteLine(Diagnostic.Message);
         Console.WriteLine(Diagnostic.Range.Start);
         Console.WriteLine(Diagnostic.Range.End);
-      }*/
+      }
     }
 
     public class TestDiagnosticReceiver {

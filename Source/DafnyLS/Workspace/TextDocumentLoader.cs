@@ -29,42 +29,13 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
     }
 
     public async Task<DafnyDocument> LoadAsync(TextDocumentItem textDocument, bool verify, CancellationToken cancellationToken) {
-      /*
-      Console.WriteLine("************** Start loading the target file asynchronously!!! **************");
-      var errorReporter = new BuildErrorReporter();
-      var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
-      // DocumentPrinter.OutputProgramInfo(program);
-      var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
-      // DocumentPrinter.OutputProgramInfo(program);
-      var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
-      // DocumentPrinter.OutputProgramInfo(program);
-      // DocumentModifier.RemoveLastLineOfFOO(program);
-      
-      var serializedCounterExamples = await VerifyIfEnabled(textDocument, program, verify, cancellationToken);
-      // DocumentPrinter.OutputProgramInfo(program);
-      // DocumentPrinter.OutputErrorInfo(errorReporter);
-      // var serializedCounterExamples = await VerifyTwiceWithModificationFirst(textDocument, program, verify, cancellationToken);
-      return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);*/
       if(verify){
-        return await GenerateProgram(textDocument ,cancellationToken);
+        return await GenerateProgramAssertionTestAdvanced(textDocument ,cancellationToken);
       }
       else{
         return await GenerateProgramWithoutVerify(textDocument, cancellationToken);
       }
     }
-    /*
-    private async Task<string?> VerifyIfEnabled(TextDocumentItem textDocument, Dafny.Program program, bool verify, CancellationToken cancellationToken) {
-      if(!verify) {
-        Console.WriteLine("*************** Not verifying this time ****************");
-        return null;
-      }
-      _notificationPublisher.Started(textDocument);
-      Console.WriteLine("*************** Verify started ****************");
-      var serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
-      _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
-      Console.WriteLine("*************** Verify Complete ****************");
-      return serializedCounterExamples;
-    }*/
 
     private async Task<DafnyDocument> GenerateProgramWithSmallTweak(TextDocumentItem textDocument, CancellationToken cancellationToken){
       var errorReporter = new BuildErrorReporter();
@@ -73,9 +44,9 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       // Verify 
       _notificationPublisher.Started(textDocument);
-      DocumentModifier.RemoveLemmaLines(program, "foo", "module1", 3);
+      DocumentModifier.RemoveLemmaLinesFlattened(program, "foo", "module1", 1);
       var serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
-      DocumentPrinter.OutputProgramInfo(program);
+      // DocumentPrinter.OutputProgramInfo(program);
       DocumentPrinter.OutputErrorInfo(errorReporter);
 
       errorReporter = new BuildErrorReporter();
@@ -83,8 +54,15 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
+      var Stm = DocumentPrinter.GetStatement(program, "module1", "foo", 0);
+      if(Stm == null){
+        Console.WriteLine("????????? Can't be null?!");
+      }
+      else{
+        Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> " + Stm.Tok.GetLspRange().Start + " to " + Stm.Tok.GetLspRange().End);
+      }
       _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
-      DocumentPrinter.OutputProgramInfo(program);
+      // DocumentPrinter.OutputProgramInfo(program);
       DocumentPrinter.OutputErrorInfo(errorReporter);
 
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
@@ -108,7 +86,9 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
-      // DocumentPrinter.OutputProgramInfo(program);
+      DocumentPrinter.OutputProgramInfo(program);
+      int StatementCount = DocumentPrinter.GetStatementCount(program, "module1", "foo");
+      Console.WriteLine(">>>>>>>>>>>>>>>>>> # Statement: " + StatementCount + " <<<<<<<<<<<<<<<<<<");
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, null);
     }
 
@@ -189,5 +169,70 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
+  
+    private async Task<DafnyDocument> GenerateProgramAssertionTestAdvanced(TextDocumentItem textDocument, CancellationToken cancellationToken){
+      int begin = 0;    // Beginning of the target search range
+      int end = 0;      // End of the target search range
+      string ModuleName = "module1";
+      string LemmaName = "foo";
+      
+      _notificationPublisher.Started(textDocument);
+
+      // Initial run, to record program info
+      var errorReporter = new BuildErrorReporter();
+      var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
+      var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
+      var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
+      // Record the program info
+      end = DocumentPrinter.GetStatementCount(program, ModuleName, LemmaName);
+
+      var serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
+      if(errorReporter.AllMessages[ErrorLevel.Error].Count == 0){
+        _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
+        return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
+      }
+      if(errorReporter.AllMessages[ErrorLevel.Error].Count != 0 && end == 0){
+        Console.WriteLine("The error is not in the designated lemma or module");
+        _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
+        return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
+      }
+
+      // Start binary search
+      while(begin < end){
+        int middle = (begin + end) / 2;
+        Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Current middle: " + middle + "<<<<<<<<<<<<<<<<<<<<<<<<");
+        errorReporter = new BuildErrorReporter();
+        program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
+        compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
+        symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
+        DocumentModifier.RemoveLemmaLinesFlattened(program, LemmaName, ModuleName, middle);
+        serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
+        if(errorReporter.AllMessages[ErrorLevel.Error].Count == 0){
+          begin = middle + 1;
+        }
+        else{
+          end = middle;
+        }
+      }
+      Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Final conclusion: assertion failure of statement #" + (begin - 1) + "<<<<<<<<<<<<<<<<<<<<<<<<");
+      int TargetLine = begin - 1;
+
+      // Perform the final pass, and record the lsp location of assertion failure
+      errorReporter = new BuildErrorReporter();
+      program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
+      compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
+      symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
+
+      var Target = DocumentPrinter.GetStatement(program,ModuleName,LemmaName,TargetLine);
+      var Location = Target.Tok.GetLspPosition();
+      var Range = Target.Tok.GetLspRange();
+      Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Final conclusion: assertion failure of statement #" + (begin - 1) + "<<<<<<<<<<<<<<<<<<<<<<<<");
+      Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Assertion failure Location: " + Location);
+      Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Assertion failure Range: " + Range.Start + " to " + Range.End);
+
+      serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
+      _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
+      return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
+    }  
   }
 }

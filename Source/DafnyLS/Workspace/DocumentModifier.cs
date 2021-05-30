@@ -1,6 +1,7 @@
 using Microsoft.Dafny.LanguageServer.Language;
 using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
@@ -96,5 +97,77 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 }
             }
         }
+
+        public static void RemoveLemmaLinesFlattened(Dafny.Program program, string LemmaName, string ModuleName, int Start){
+            // Console.WriteLine("Program module signature size: " + program.ModuleSigs.Count);
+            foreach(ModuleDefinition module in program.ModuleSigs.Keys){
+                if(module.FullName != ModuleName) continue;
+                //Console.WriteLine("   Module "+module_count+" full name: " + module.FullName);
+                foreach(ICallable callable in module.CallGraph.vertices.Keys){
+                    var corresVertex = module.CallGraph.vertices[callable];
+                    // Console.WriteLine("     Callable "+callable_count+" name: " + callable.NameRelativeToModule);
+                    if(callable.WhatKind != "lemma") continue;
+                    if(callable.NameRelativeToModule != LemmaName) continue;
+                    var LemmaCallable = (Lemma)callable;
+                    var Body = LemmaCallable.methodBody;
+                    int result = RemoveLemmaLinesFlattenedHelper(Body.Body, Start);
+                }
+            }
+        }
+
+        private static int RemoveLemmaLinesFlattenedHelper(List<Statement> Body, int Start){
+            if(Body == null) return Start;
+            int Count = 0;
+            foreach(var Stm in Body){
+                if(Start == 0){
+                    Body.RemoveRange(Count, Body.Count - Count);
+                    return 0;
+                }
+                Start = RemoveLemmaLinesFlattenedStmtHelper(Stm, Start);
+                ++Count;
+            }
+            return Start;
+        }
+        
+        private static int RemoveLemmaLinesFlattenedStmtHelper(Statement Stm, int Start){
+            var Type = DocumentPrinter.GetStatementType(Stm);
+            if(Stm is BlockStmt){
+                var BlockStm = (BlockStmt) Stm;
+                return RemoveLemmaLinesFlattenedHelper(BlockStm.Body, Start);
+            }
+            else if(Stm is WhileStmt){
+                var WhileStm = (WhileStmt) Stm;
+                return RemoveLemmaLinesFlattenedHelper(WhileStm.Body.Body, Start);
+            }
+            else if(Stm is ForallStmt){
+                var ForallStm = (ForallStmt) Stm;
+                return RemoveLemmaLinesFlattenedStmtHelper(ForallStm.Body, Start);
+            }
+            else if(Stm is NestedMatchStmt){
+                var NestedMatchStm = (NestedMatchStmt) Stm;
+                return RemoveLemmaLinesFlattenedStmtHelper(NestedMatchStm.ResolvedStatement, Start);
+            }
+            else if(Stm is IfStmt){
+                return RemoveLemmaLinesIfHelper((IfStmt) Stm, Start);
+            }
+            else{
+                return Start - 1;
+            }
+        }   
+        private static int RemoveLemmaLinesIfHelper(IfStmt Stm, int Start){
+            Start = RemoveLemmaLinesFlattenedHelper(Stm.Thn.Body, Start);
+            if(Start == 0){
+                Stm.Els = null;
+                return 0;
+            }
+            else if(Stm.Els == null){
+                return Start;
+            }
+            else{
+                return RemoveLemmaLinesFlattenedStmtHelper(Stm.Els, Start);
+            }
+        }
+
+
     }
 }
