@@ -224,14 +224,6 @@ module module1 {
       });
       _client.OpenDocument(documentItem);
       var changeReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
-      /*
-      var changeDiagnostics = changeReport.Diagnostics.ToArray();
-      for(int i = 0; i < changeDiagnostics.Length; ++i){
-        var Diagnostic = changeDiagnostics[i];
-        Console.WriteLine(Diagnostic.Message);
-        Console.WriteLine(Diagnostic.Range.Start);
-        Console.WriteLine(Diagnostic.Range.End);
-      }*/
       _client.SaveDocument(documentItem);
       var saveReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
       var saveDiagnostics = saveReport.Diagnostics.ToArray();

@@ -116,22 +116,27 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
 
       public void ErrorWriteLine(TextWriter tw, string s) {
+        Console.WriteLine(">>>>>>>>>>>>>>>> ErrorWriteLine <<<<<<<<<<<<<<<<<");
         _logger.LogError(s);
       }
 
       public void ErrorWriteLine(TextWriter tw, string format, params object[] args) {
+        Console.WriteLine(">>>>>>>>>>>>>>>> ErrorWriteLine <<<<<<<<<<<<<<<<<");
         _logger.LogError(format, args);
       }
 
       public void Inform(string s, TextWriter tw) {
+        Console.WriteLine(">>>>>>>>>>>>>>>> Inform: " +s+" <<<<<<<<<<<<<<<<<");
         _logger.LogInformation(s);
       }
 
       public void ReportBplError(IToken tok, string message, bool error, TextWriter tw, [AllowNull] string category) {
+        Console.WriteLine(">>>>>>>>>>>>>>>> Report BPL Error <<<<<<<<<<<<<<<<<");
         _logger.LogError(message);
       }
 
       public void WriteErrorInformation(ErrorInformation errorInfo, TextWriter tw, bool skipExecutionTrace) {
+        Console.WriteLine(">>>>>>>>>>>>>>>> WriteErrorInformation <<<<<<<<<<<<<<<<<");
         CaptureCounterExamples(errorInfo);
         CaptureViolatedPostconditions(errorInfo);
       }
