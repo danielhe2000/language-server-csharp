@@ -53,6 +53,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 if(callable.WhatKind == "lemma"){
                     var LemmaCallable = (Lemma)callable;
                     var Body = LemmaCallable.methodBody;
+                    if(Body == null) return;
                     Console.WriteLine("     Callable "+CallableCount+" #statement " + Body.Body.Count);
                     for(int i = 0; i < Body.Body.Count; ++ i){
                         PrintStatementInfo(Body.Body[i], "Callable "+CallableCount, i, 0);
@@ -154,6 +155,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                     if(callable.WhatKind != "lemma" || callable.NameRelativeToModule != LemmaName) continue;
                     var LemmaCallable = (Lemma)callable;
                     var Body = LemmaCallable.Body.Body;
+                    if(Body == null) return 0;
                     return GetStatementCountHelper(Body);
                 }
             }
@@ -163,7 +165,12 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
         private static int GetStatementCountHelper(IEnumerable<Statement> Body){
             int result = 0;
             foreach(var Stm in Body){
-                if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt){
+                if(Stm is VarDeclPattern) continue;
+                if(Stm is ForallStmt){
+                    result += 1;
+                    result += GetStatementCountHelper(Stm.SubStatements);
+                }
+                else if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is NestedMatchStmt || Stm is MatchStmt){
                     result += GetStatementCountHelper(Stm.SubStatements);
                 }
                 else{
@@ -186,12 +193,24 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             }
             return null;
         }
+
+        public static ICallable GetCallable(Dafny.Program program, string ModuleName, string LemmaName){
+            foreach(ModuleDefinition module in program.ModuleSigs.Keys){
+                if(module.FullName != ModuleName) continue;
+                foreach(ICallable callable in module.CallGraph.vertices.Keys){
+                    if(callable.WhatKind != "lemma" || callable.NameRelativeToModule != LemmaName) continue;
+                    return callable;
+                }
+            }
+            return null;
+        }
         
         private static int GetStatementHelper(IEnumerable<Statement> Body, int Location, out Statement Result){
             Result = null;
             foreach(var Stm in Body){
+                if(Stm is VarDeclPattern) continue;
                 if(Location == 0) {
-                    if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt){
+                    if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is NestedMatchStmt || Stm is MatchStmt){
                         Location = GetStatementHelper(Stm.SubStatements, Location, out Result);
                         if(Result != null){
                             return 0;
@@ -202,7 +221,10 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                         return 0;
                     }
                 }
-                if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt){
+                if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt || Stm is MatchStmt){
+                    if(Stm is ForallStmt){
+                        --Location;
+                    }
                     Location = GetStatementHelper(Stm.SubStatements, Location, out Result);
                     if(Location == 0 && Result != null){
                         return 0;

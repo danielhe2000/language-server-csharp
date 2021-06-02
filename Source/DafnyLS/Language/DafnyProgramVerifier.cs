@@ -41,8 +41,13 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           // TODO This may be subject to change. See Microsoft.Boogie.Counterexample
           //      A dash means write to the textwriter instead of a file.
           // https://github.com/boogie-org/boogie/blob/b03dd2e4d5170757006eef94cbb07739ba50dddb/Source/VCGeneration/Couterexample.cs#L217
+          // string [] Arguments = {"/noCheating:1"};
+          // Console.WriteLine(Arguments[0]);
+          // DafnyOptions.O.Parse(Arguments);
+          // Console.WriteLine("Do we have proc? " + DafnyOptions.O.UserConstrainedProcsToCheck);
           DafnyOptions.O.ModelViewFile = "-";
-          DafnyOptions.O.TimeLimit = 5;
+          DafnyOptions.O.TimeLimit = 2;
+          
           _initialized = true;
           logger.LogTrace("initialized the boogie verifier...");
         }
@@ -63,7 +68,8 @@ namespace Microsoft.Dafny.LanguageServer.Language {
         var printer = new ModelCapturingOutputPrinter(_logger, errorReporter);
         ExecutionEngine.printer = printer;
         var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
-        foreach(var (_, boogieProgram) in translated) {
+        foreach(var (CompileName, boogieProgram) in translated) {
+          // Console.WriteLine("------------------ Compile name of current boogie program is: " + CompileName  + "---------");
           cancellationToken.ThrowIfCancellationRequested();
           VerifyWithBoogie(boogieProgram, cancellationToken);
         }
@@ -116,27 +122,28 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
 
       public void ErrorWriteLine(TextWriter tw, string s) {
-        Console.WriteLine(">>>>>>>>>>>>>>>> ErrorWriteLine <<<<<<<<<<<<<<<<<");
+        // Console.WriteLine(">>>>>>>>>>>>>>>> ErrorWriteLine <<<<<<<<<<<<<<<<<");
         _logger.LogError(s);
       }
 
       public void ErrorWriteLine(TextWriter tw, string format, params object[] args) {
-        Console.WriteLine(">>>>>>>>>>>>>>>> ErrorWriteLine <<<<<<<<<<<<<<<<<");
+        // Console.WriteLine(">>>>>>>>>>>>>>>> ErrorWriteLine <<<<<<<<<<<<<<<<<");
         _logger.LogError(format, args);
       }
 
       public void Inform(string s, TextWriter tw) {
         Console.WriteLine(">>>>>>>>>>>>>>>> Inform: " +s+" <<<<<<<<<<<<<<<<<");
+        
         _logger.LogInformation(s);
       }
 
       public void ReportBplError(IToken tok, string message, bool error, TextWriter tw, [AllowNull] string category) {
-        Console.WriteLine(">>>>>>>>>>>>>>>> Report BPL Error <<<<<<<<<<<<<<<<<");
+        // Console.WriteLine(">>>>>>>>>>>>>>>> Report BPL Error <<<<<<<<<<<<<<<<<");
         _logger.LogError(message);
       }
 
       public void WriteErrorInformation(ErrorInformation errorInfo, TextWriter tw, bool skipExecutionTrace) {
-        Console.WriteLine(">>>>>>>>>>>>>>>> WriteErrorInformation <<<<<<<<<<<<<<<<<");
+        // Console.WriteLine(">>>>>>>>>>>>>>>> WriteErrorInformation <<<<<<<<<<<<<<<<<");
         CaptureCounterExamples(errorInfo);
         CaptureViolatedPostconditions(errorInfo);
       }

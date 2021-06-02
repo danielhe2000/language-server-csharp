@@ -119,6 +119,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             if(Body == null) return Start;
             int Count = 0;
             foreach(var Stm in Body){
+                if(Stm is VarDeclPattern) continue;
                 if(Start == 0){
                     Body.RemoveRange(Count, Body.Count - Count);
                     return 0;
@@ -130,31 +131,42 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
         }
         
         private static int RemoveLemmaLinesFlattenedStmtHelper(Statement Stm, int Start){
+            if(Stm is VarDeclPattern) return Start;
             var Type = DocumentPrinter.GetStatementType(Stm);
             if(Stm is BlockStmt){
                 var BlockStm = (BlockStmt) Stm;
+                if(BlockStm.Body == null) return Start;
                 return RemoveLemmaLinesFlattenedHelper(BlockStm.Body, Start);
             }
             else if(Stm is WhileStmt){
                 var WhileStm = (WhileStmt) Stm;
+                if(WhileStm.Body == null || WhileStm.Body.Body == null) return Start;
                 return RemoveLemmaLinesFlattenedHelper(WhileStm.Body.Body, Start);
             }
             else if(Stm is ForallStmt){
                 var ForallStm = (ForallStmt) Stm;
-                return RemoveLemmaLinesFlattenedStmtHelper(ForallStm.Body, Start);
+                --Start;
+                if(ForallStm.Body == null) return Start;
+                // Forall statement body must be a block statement, so it can safely handle 0 situation
+                return RemoveLemmaLinesFlattenedStmtHelper(ForallStm.Body, Start);   
             }
             else if(Stm is NestedMatchStmt){
                 var NestedMatchStm = (NestedMatchStmt) Stm;
+                if(NestedMatchStm.ResolvedStatement == null) return Start;
                 return RemoveLemmaLinesFlattenedStmtHelper(NestedMatchStm.ResolvedStatement, Start);
             }
             else if(Stm is IfStmt){
                 return RemoveLemmaLinesIfHelper((IfStmt) Stm, Start);
+            }
+            else if(Stm is MatchStmt){
+                return RemoveLemmaLinesMatchHelper((MatchStmt)Stm, Start);
             }
             else{
                 return Start - 1;
             }
         }   
         private static int RemoveLemmaLinesIfHelper(IfStmt Stm, int Start){
+            if(Stm.Thn == null || Stm.Thn.Body == null) return Start;
             Start = RemoveLemmaLinesFlattenedHelper(Stm.Thn.Body, Start);
             if(Start == 0){
                 Stm.Els = null;
@@ -166,6 +178,14 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             else{
                 return RemoveLemmaLinesFlattenedStmtHelper(Stm.Els, Start);
             }
+        }
+
+        private static int RemoveLemmaLinesMatchHelper(MatchStmt Stm, int Start){
+            foreach(var Case in Stm.Cases){
+                if(Case.Body == null) continue;
+                Start = RemoveLemmaLinesFlattenedHelper(Case.Body, Start);
+            }
+            return Start;
         }
 
 

@@ -30,7 +30,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
 
     public async Task<DafnyDocument> LoadAsync(TextDocumentItem textDocument, bool verify, CancellationToken cancellationToken) {
       if(verify){
-        return await GenerateProgramAssertionTestAdvanced(textDocument ,cancellationToken);
+        return await GenerateProgram(textDocument ,cancellationToken);
       }
       else{
         return await GenerateProgramWithoutVerify(textDocument, cancellationToken);
@@ -44,7 +44,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       // Verify 
       _notificationPublisher.Started(textDocument);
-      DocumentModifier.RemoveLemmaLinesFlattened(program, "foo", "module1", 1);
+      DocumentModifier.RemoveLemmaLinesFlattened(program, "foo", "module1", 2);
       var serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
       // DocumentPrinter.OutputProgramInfo(program);
       DocumentPrinter.OutputErrorInfo(errorReporter);
@@ -54,7 +54,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
-      var Stm = DocumentPrinter.GetStatement(program, "module1", "foo", 0);
+      var Stm = DocumentPrinter.GetStatement(program, "module1", "foo", 2);
       if(Stm == null){
         Console.WriteLine("????????? Can't be null?!");
       }
@@ -87,8 +87,8 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       DocumentPrinter.OutputProgramInfo(program);
-      int StatementCount = DocumentPrinter.GetStatementCount(program, "module1", "foo");
-      Console.WriteLine(">>>>>>>>>>>>>>>>>> # Statement: " + StatementCount + " <<<<<<<<<<<<<<<<<<");
+      // int StatementCount = DocumentPrinter.GetStatementCount(program, "module1", "foo");
+      // Console.WriteLine(">>>>>>>>>>>>>>>>>> # Statement: " + StatementCount + " <<<<<<<<<<<<<<<<<<");
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, null);
     }
 
@@ -224,8 +224,16 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
 
       var Target = DocumentPrinter.GetStatement(program,ModuleName,LemmaName,TargetLine);
-      var Location = Target.Tok.GetLspPosition();
-      var Range = Target.Tok.GetLspRange();
+      Position Location;
+      OmniSharp.Extensions.LanguageServer.Protocol.Models.Range Range;
+      if(Target != null){
+        Location = Target.Tok.GetLspPosition();
+        Range = Target.Tok.GetLspRange();
+      }else{
+        var TargetLemma = DocumentPrinter.GetCallable(program,ModuleName, LemmaName);
+        Location = TargetLemma.Tok.GetLspPosition();
+        Range = TargetLemma.Tok.GetLspRange();
+      }
       Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Final conclusion: assertion failure of statement #" + (begin - 1) + "<<<<<<<<<<<<<<<<<<<<<<<<");
       Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Assertion failure Location: " + Location);
       Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Assertion failure Range: " + Range.Start + " to " + Range.End);

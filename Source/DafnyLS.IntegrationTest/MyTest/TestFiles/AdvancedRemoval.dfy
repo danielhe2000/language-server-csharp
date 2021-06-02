@@ -1,19 +1,30 @@
 module module1 {
+    datatype Step = GetStep(key:int, value:int) | PutStep(key:int, value:int) | OtherStep(key:int, value: int)
+    
     lemma foo() 
     {
-        var a := 1;
+        var a := PutStep(2,3);
+        assert true;
         match a{
-            case 0 => assert true;
-            case 2 => assert true;
-            case 1 => assert false;
+            case GetStep(key, value) =>{
+                assert key == 2;
+                assert value == 3;
+            }
+            case PutStep(key, value) =>{
+                assert key == 2;
+                if(value != 3){
+                    assert true;
+                    assert true;
+                }
+                else{
+                    assert value != 3;
+                }
+            }
+            case OtherStep(key, value) =>{
+                assert key == 2;
+                assert value == 3;
+            }
         }
         assert true;
-        a := 2;
-        
     }
-
-    lemma bar(){
-        assert true;
-    }
-
 }
