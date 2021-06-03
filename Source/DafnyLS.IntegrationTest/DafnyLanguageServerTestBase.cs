@@ -22,7 +22,7 @@ namespace Microsoft.Dafny.LanguageServer.IntegrationTest {
     public IDocumentDatabase Documents => Server.GetRequiredService<IDocumentDatabase>();
 
     public DafnyLanguageServerTestBase() : base(new JsonRpcTestOptions(LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning)))
-                                                    .WithTestTimeout(System.TimeSpan.FromSeconds(50))) { }
+                                                    .WithTestTimeout(System.TimeSpan.FromSeconds(120))) { }
 
     protected override (Stream clientOutput, Stream serverInput) SetupServer() {
       var clientPipe = new Pipe(TestOptions.DefaultPipeOptions);

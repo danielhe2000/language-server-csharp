@@ -113,13 +113,70 @@ namespace Microsoft.Dafny.LanguageServer.Language {
         _mutex.Release();
       }
     }
+    
+    public async Task<string?> VerifyAsyncRecordInfo(Dafny.Program program, CancellationToken cancellationToken, 
+                                                    List<Tuple<string, string> > callableName, List<string> callableInfo) {
+      if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
+        // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
+        _logger.LogDebug("skipping program verification since the parser or resolvers already reported errors");
+        return null;
+      }
+      Console.WriteLine("User Constrained Procs To Check?" + DafnyOptions.O.UserConstrainedProcsToCheck);
+      await _mutex.WaitAsync(cancellationToken);
+      try {
+        // The printer is responsible for two things: It logs boogie errors and captures the counter example model.
+        var errorReporter = program.reporter;
+        // List<Tuple<string, string> > callableName = new List<Tuple<string, string> >();
+        // List<string> callableInfo = new List<string>();
+        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter,callableName, callableInfo);
+        ExecutionEngine.printer = printer;
+        var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
+        foreach(var (CompileName, boogieProgram) in translated) {
+          // Console.WriteLine("------------------ Compile name of current boogie program is: " + CompileName  + "---------");
+          cancellationToken.ThrowIfCancellationRequested();
+          VerifyWithBoogie(boogieProgram, cancellationToken);
+        }
+        return printer.SerializedCounterExamples;
+      } finally {
+        _mutex.Release();
+      }
+    }
+
+    public async Task<string?> VerifyAsyncRecordInfoSpecifyName(Dafny.Program program, CancellationToken cancellationToken, 
+                                                                List<Tuple<string, string> > callableName, List<string> callableInfo,
+                                                                string ModuleName, string LemmaName) {
+      if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
+        // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
+
+        _logger.LogDebug("skipping program verification since the parser or resolvers already reported errors");
+        return null;
+      }
+      await _mutex.WaitAsync(cancellationToken);
+      try {
+        string toBeChecked = "*" + ModuleName + ".__default." + LemmaName;
+        DafnyOptions.O.procsToCheck.Add(toBeChecked);
+        // Console.WriteLine("User Constrained Procs To Check?" + DafnyOptions.O.UserConstrainedProcsToCheck);
+        
+        // The printer is responsible for two things: It logs boogie errors and captures the counter example model.
+        var errorReporter = program.reporter;
+        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter,callableName, callableInfo);
+        ExecutionEngine.printer = printer;
+        var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
+        foreach(var (CompileName, boogieProgram) in translated) {
+          cancellationToken.ThrowIfCancellationRequested();
+          VerifyWithBoogie(boogieProgram, cancellationToken);
+        }
+        if(DafnyOptions.O.procsToCheck.Count > 0) DafnyOptions.O.procsToCheck.RemoveAt(DafnyOptions.O.procsToCheck.Count - 1);
+        return printer.SerializedCounterExamples;
+      } finally {
+        _mutex.Release();
+      }
+    }
+    
     private void VerifyWithBoogie(Boogie.Program program, CancellationToken cancellationToken) {
       program.Resolve();
       program.Typecheck();
       
-      // var cmdOption = new CommandLineOptions();
-      // cmdOption.TimeLimit = 10;
-      // CommandLineOptions.Install(cmdOption);
       ExecutionEngine.EliminateDeadVariables(program);
       ExecutionEngine.CollectModSets(program);
       ExecutionEngine.CoalesceBlocks(program);
@@ -137,6 +194,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
 
     private void CancelVerification(string requestId) {
       _logger.LogDebug("requesting verification cancellation of {}", requestId);
+      Console.WriteLine("requesting verification cancellation of {}", requestId);
       ExecutionEngine.CancelRequest(requestId);
     }
 
@@ -187,8 +245,8 @@ namespace Microsoft.Dafny.LanguageServer.Language {
             // Console.WriteLine(match.Value);
             GroupCollection groups = match.Groups;
             _callableName.Add(Tuple.Create<string, string>(groups["ModuleName"].ToString(), groups["CallableName"].ToString()));
-            Console.WriteLine(">>>>>>>>>>>>>>>> Module name: " + groups["ModuleName"]);
-            Console.WriteLine(">>>>>>>>>>>>>>>> Callable name: " + groups["CallableName"]);
+            // Console.WriteLine(">>>>>>>>>>>>>>>> Module name: " + groups["ModuleName"]);
+            // Console.WriteLine(">>>>>>>>>>>>>>>> Callable name: " + groups["CallableName"]);
         }
         if((s == "verified" || s == "timed out" || s == "error") && _callableName.Count - _callableInfo.Count == 1){
           if(s == "timed out"){

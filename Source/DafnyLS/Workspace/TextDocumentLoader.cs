@@ -3,6 +3,8 @@ using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
+using Microsoft.Boogie;
 using System.Linq;
 using System;
 
@@ -55,7 +57,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
-      DocumentPrinter.OutputProgramInfo(program);
+      // DocumentPrinter.OutputProgramInfo(program);
       // int StatementCount = DocumentPrinter.GetStatementCount(program, "module1", "foo");
       // Console.WriteLine(">>>>>>>>>>>>>>>>>> # Statement: " + StatementCount + " <<<<<<<<<<<<<<<<<<");
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, null);
@@ -250,14 +252,57 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       _notificationPublisher.Started(textDocument);
-      var serializedCounterExamples = await _verifier.VerifyAsyncRecordInfo(program, cancellationToken);
+      List<Tuple<string, string> > callableName = new List<Tuple<string, string> >();
+      List<string> callableInfo = new List<string>();
+      List<int> timeoutLines = new List<int>();
+      var serializedCounterExamples = await _verifier.VerifyAsyncRecordInfo(program, cancellationToken, callableName, callableInfo);
+      Console.WriteLine(">>>>>>>>>>>>>> Timeout Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
+      Console.WriteLine(">>>>>>>>>>>>>> Timeout Callable Info Count: " + callableInfo.Count + "<<<<<<<<<<<<<<");
+      for(int i = 0; i < callableName.Count; ++i){
+        string ModuleName = callableName[i].Item1;
+        string LemmaName = callableName[i].Item2;
+        int begin = 0;    // Beginning of the target search range
+        int end = DocumentPrinter.GetStatementCount(program, ModuleName, LemmaName);      // End of the target search range
+        if(end == 0){
+          Console.WriteLine("The timeout lemma has no body / the timeout callable is not a lemma");
+          continue;
+        }
+        Console.WriteLine(">>>>>>>>>>> Current Lemma "+LemmaName + " has #statement " + end);
+        while(begin < end){
+          int middle = (begin + end) / 2;
+          Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Current middle: " + middle + "<<<<<<<<<<<<<<<<<<<<<<<<");
+          List<Tuple<string, string> > TempCallableName = new List<Tuple<string, string> >();
+          List<string> TempCallableInfo = new List<string>();
+          var TempErrorReporter = new BuildErrorReporter();
+          var TempProgram = await _parser.ParseAsync(textDocument, TempErrorReporter, cancellationToken);
+          var TempCompilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, TempProgram, cancellationToken);
+          DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,LemmaName,ModuleName,middle);
+          Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, LemmaName));
+          var temp = _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, cancellationToken, TempCallableName, TempCallableInfo, callableName[i].Item1, callableName[i].Item2);
+          if(TempCallableInfo.Count == 0){
+            begin = middle + 1;
+          }
+          else{
+            end = middle;
+          }
+        }
+        int TargetLine = begin - 1;
+        var Target = DocumentPrinter.GetStatement(program, ModuleName, LemmaName,TargetLine);
+        OmniSharp.Extensions.LanguageServer.Protocol.Models.Range Range;
+        if(Target != null){
+          Range = Target.Tok.GetLspRange();
+          
+        }
+        else{
+          var TargetLemma = DocumentPrinter.GetCallable(program, ModuleName, LemmaName);
+          Range = TargetLemma.Tok.GetLspRange();
+        }
+        Console.WriteLine("~~~~~~~~~~~~~ Module " + ModuleName + ", Lemma: " + LemmaName + " timeout range: " + Range.Start + " to " + Range.End + " ~~~~~~~~~~");
+      }
       // DocumentPrinter.OutputErrorInfo(errorReporter);
       _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
       // DocumentPrinter.OutputErrorInfo(errorReporter);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
-  
-  
-  
   }
 }

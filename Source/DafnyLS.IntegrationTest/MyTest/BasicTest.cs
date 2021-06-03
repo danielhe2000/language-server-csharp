@@ -19,7 +19,7 @@ namespace Microsoft.Dafny.LanguageServer.IntegrationTest.Synchronization {
   [TestClass]
   public class MyTest : DafnyLanguageServerTestBase {
     private ILanguageClient _client;
-    private const int MaxTestExecutionTimeMs = 30000;
+    private const int MaxTestExecutionTimeMs = 60000;
     private TestDiagnosticReceiver _diagnosticReceiver;
     private IDictionary<string, string> _configuration;
 

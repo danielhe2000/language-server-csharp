@@ -2,6 +2,7 @@ using Microsoft.Dafny.LanguageServer.Language;
 using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using System.Collections.Generic;
+using Microsoft.Boogie;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
@@ -186,6 +187,15 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 Start = RemoveLemmaLinesFlattenedHelper(Case.Body, Start);
             }
             return Start;
+        }
+
+        public static void CopyToken(Token Old, Token New){
+            New.kind = Old.kind;
+            New.pos = Old.pos;
+            New.col = Old.col;
+            New.line = Old.line;
+            New.val = Old.val;
+            
         }
 
 

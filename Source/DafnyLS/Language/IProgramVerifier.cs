@@ -1,5 +1,7 @@
-﻿using System.Threading;
+﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace Microsoft.Dafny.LanguageServer.Language {
   /// <summary>
@@ -16,5 +18,9 @@ namespace Microsoft.Dafny.LanguageServer.Language {
     /// <exception cref="System.ObjectDisposedException">Thrown if the cancellation token was disposed before the completion.</exception>
     Task<string?> VerifyAsync(Dafny.Program program, CancellationToken cancellationToken);
     Task<string?> VerifyAsyncRecordInfo(Dafny.Program program, CancellationToken cancellationToken);
+    Task<string?> VerifyAsyncRecordInfo(Dafny.Program program, CancellationToken cancellationToken, List<Tuple<string, string> > callableName, List<string> callableInfo);
+    Task<string?> VerifyAsyncRecordInfoSpecifyName(Dafny.Program program, CancellationToken cancellationToken, 
+                                                                List<Tuple<string, string> > callableName, List<string> callableInfo,
+                                                                string ModuleName, string LemmaName);
   }
 }

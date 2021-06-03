@@ -55,6 +55,9 @@
     <None Include="MyTest\TestFiles\Timeouts.dfy" Link="MyTest\TestFiles\Timeouts.dfy">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="MyTest\TestFiles\TimeoutsModified.dfy" Link="MyTest\TestFiles\TimeoutsModified.dfy">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

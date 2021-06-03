@@ -103,7 +103,7 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
         case ValuetypeDecl valueTypeDeclaration:
           return ProcessValueType(moduleSymbol, valueTypeDeclaration);
         default:
-          _logger.LogWarning("encountered unknown top level declaration {} of type {}", topLevelDeclaration.Name, topLevelDeclaration.GetType());
+          // _logger.LogWarning("encountered unknown top level declaration {} of type {}", topLevelDeclaration.Name, topLevelDeclaration.GetType());
           return null;
         }
       }
@@ -204,7 +204,7 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
       }
 
       public override void VisitUnknown(object node, Boogie.IToken token) {
-        _logger.LogWarning("encountered unknown syntax node of type {} in {}@({},{})", node.GetType(), Path.GetFileName(token.filename), token.line, token.col);
+        // _logger.LogWarning("encountered unknown syntax node of type {} in {}@({},{})", node.GetType(), Path.GetFileName(token.filename), token.line, token.col);
       }
 
       public override void Visit(BlockStmt blockStatement) {

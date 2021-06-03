@@ -19,7 +19,7 @@ namespace Microsoft.Dafny.LanguageServer.IntegrationTest.Synchronization {
   [TestClass]
   public class TimeoutTest : DafnyLanguageServerTestBase {
     private ILanguageClient _client;
-    private const int MaxTestExecutionTimeMs = 60000;
+    private const int MaxTestExecutionTimeMs = 120000;
     private TestDiagnosticReceiver _diagnosticReceiver;
     private IDictionary<string, string> _configuration;
 
@@ -79,7 +79,7 @@ module module1 {
     [TestMethod]
     [Timeout(MaxTestExecutionTimeMs)]
     public async Task TimeoutWithBoogieTest() {
-      var filePath = Path.Combine("MyTest", "TestFiles", "Timeouts.dfy");
+      var filePath = Path.Combine("MyTest", "TestFiles", "TimeoutsModified.dfy");
       var source = await File.ReadAllTextAsync(filePath, CancellationToken);
       var documentItem = CreateTestDocument(source);
       await SetUp(new Dictionary<string, string>() {
