@@ -2,10 +2,12 @@
 using Microsoft.Extensions.Logging;
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace Microsoft.Dafny.LanguageServer.Language {
   /// <summary>
@@ -55,6 +57,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
     }
 
+    
     public async Task<string?> VerifyAsync(Dafny.Program program, CancellationToken cancellationToken) {
       if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
         // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
@@ -79,6 +82,37 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
     }
 
+
+    public async Task<string?> VerifyAsyncRecordInfo(Dafny.Program program, CancellationToken cancellationToken) {
+      if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
+        // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
+        _logger.LogDebug("skipping program verification since the parser or resolvers already reported errors");
+        return null;
+      }
+      await _mutex.WaitAsync(cancellationToken);
+      try {
+        // The printer is responsible for two things: It logs boogie errors and captures the counter example model.
+        var errorReporter = program.reporter;
+        List<Tuple<string, string> > callableName = new List<Tuple<string, string> >();
+        List<string> callableInfo = new List<string>();
+        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter,callableName, callableInfo);
+        ExecutionEngine.printer = printer;
+        var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
+        foreach(var (CompileName, boogieProgram) in translated) {
+          // Console.WriteLine("------------------ Compile name of current boogie program is: " + CompileName  + "---------");
+          cancellationToken.ThrowIfCancellationRequested();
+          VerifyWithBoogie(boogieProgram, cancellationToken);
+        }
+        Console.WriteLine(">>>>>>>>>>>>>> Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
+        Console.WriteLine(">>>>>>>>>>>>>> Callable Info Count: " + callableInfo.Count + "<<<<<<<<<<<<<<");
+        for(int i = 0; i < callableName.Count; ++i){
+          Console.WriteLine(">>>>>>>>>>> Callable #"+i+": " + callableName[i].Item1 + ".__default." + callableName[i].Item2 + ", Status: " + callableInfo[i]);
+        }
+        return printer.SerializedCounterExamples;
+      } finally {
+        _mutex.Release();
+      }
+    }
     private void VerifyWithBoogie(Boogie.Program program, CancellationToken cancellationToken) {
       program.Resolve();
       program.Typecheck();
@@ -110,12 +144,26 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       private readonly ILogger _logger;
       private readonly ErrorReporter _errorReporter;
       private StringBuilder? _serializedCounterExamples;
+      private List<Tuple<string, string> > _callableName = new List<Tuple<string, string> >();
+      private List<string> _callableInfo = new List<string>();
+      private readonly SemaphoreSlim _mutex = new SemaphoreSlim(1);
+      // private string TargetModuleName = "";
+      // private string TargetLemmaName = "";
+      // private string TargetStatus = "";
+      // private bool hasTarget = false;
 
       public string? SerializedCounterExamples => _serializedCounterExamples?.ToString();
 
       public ModelCapturingOutputPrinter(ILogger logger, ErrorReporter errorReporter) {
         _logger = logger;
         _errorReporter = errorReporter;
+      }
+
+      public ModelCapturingOutputPrinter(ILogger logger, ErrorReporter errorReporter, List<Tuple<string, string> > callableName, List<string> callableInfo) {
+        _logger = logger;
+        _errorReporter = errorReporter;
+        _callableName = callableName;
+        _callableInfo = callableInfo;
       }
 
       public void AdvisoryWriteLine(string format, params object[] args) {
@@ -132,8 +180,25 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
 
       public void Inform(string s, TextWriter tw) {
-        Console.WriteLine(">>>>>>>>>>>>>>>> Inform: " +s+" <<<<<<<<<<<<<<<<<");
-        
+        // Console.WriteLine(">>>>>>>>>>>>>>>> Inform: \"" +s+"\" <<<<<<<<<<<<<<<<<");
+        _mutex.Wait();
+        string pattern = @"^Verifying [A-Za-z]+\$\$(?<ModuleName>\w+).__default.(?<CallableName>\w+) ...$";
+        foreach (Match match in Regex.Matches(s, pattern)){
+            // Console.WriteLine(match.Value);
+            GroupCollection groups = match.Groups;
+            _callableName.Add(Tuple.Create<string, string>(groups["ModuleName"].ToString(), groups["CallableName"].ToString()));
+            Console.WriteLine(">>>>>>>>>>>>>>>> Module name: " + groups["ModuleName"]);
+            Console.WriteLine(">>>>>>>>>>>>>>>> Callable name: " + groups["CallableName"]);
+        }
+        if((s == "verified" || s == "timed out" || s == "error") && _callableName.Count - _callableInfo.Count == 1){
+          if(s == "timed out"){
+            _callableInfo.Add(s);
+          }
+          else{
+            _callableName.RemoveAt(_callableName.Count - 1);
+          }
+        }
+        _mutex.Release();
         _logger.LogInformation(s);
       }
 

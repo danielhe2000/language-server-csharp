@@ -15,5 +15,6 @@ namespace Microsoft.Dafny.LanguageServer.Language {
     /// <exception cref="System.OperationCanceledException">Thrown when the cancellation was requested before completion.</exception>
     /// <exception cref="System.ObjectDisposedException">Thrown if the cancellation token was disposed before the completion.</exception>
     Task<string?> VerifyAsync(Dafny.Program program, CancellationToken cancellationToken);
+    Task<string?> VerifyAsyncRecordInfo(Dafny.Program program, CancellationToken cancellationToken);
   }
 }

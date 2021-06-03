@@ -30,13 +30,38 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
 
     public async Task<DafnyDocument> LoadAsync(TextDocumentItem textDocument, bool verify, CancellationToken cancellationToken) {
       if(verify){
-        return await GenerateProgram(textDocument ,cancellationToken);
+        return await GenerateProgramRecordInfo(textDocument ,cancellationToken);
       }
       else{
         return await GenerateProgramWithoutVerify(textDocument, cancellationToken);
       }
     }
+    /****************** ORIGINAL METHODS **************/
+    private async Task<DafnyDocument> GenerateProgram(TextDocumentItem textDocument, CancellationToken cancellationToken){
+      var errorReporter = new BuildErrorReporter();
+      var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
+      var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
+      var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
+      _notificationPublisher.Started(textDocument);
+      var serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
+      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
+      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
+    }
 
+    private async Task<DafnyDocument> GenerateProgramWithoutVerify(TextDocumentItem textDocument, CancellationToken cancellationToken){
+      var errorReporter = new BuildErrorReporter();
+      var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
+      var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
+      var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
+      DocumentPrinter.OutputProgramInfo(program);
+      // int StatementCount = DocumentPrinter.GetStatementCount(program, "module1", "foo");
+      // Console.WriteLine(">>>>>>>>>>>>>>>>>> # Statement: " + StatementCount + " <<<<<<<<<<<<<<<<<<");
+      return new DafnyDocument(textDocument, errorReporter, program, symbolTable, null);
+    }
+
+    /****************** USED FOR ASSERTION TEST **************/
     private async Task<DafnyDocument> GenerateProgramWithSmallTweak(TextDocumentItem textDocument, CancellationToken cancellationToken){
       var errorReporter = new BuildErrorReporter();
       var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
@@ -67,31 +92,6 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
 
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
-
-    private async Task<DafnyDocument> GenerateProgram(TextDocumentItem textDocument, CancellationToken cancellationToken){
-      var errorReporter = new BuildErrorReporter();
-      var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
-      var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
-      var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
-      _notificationPublisher.Started(textDocument);
-      var serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
-      // DocumentPrinter.OutputErrorInfo(errorReporter);
-      _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
-      // DocumentPrinter.OutputErrorInfo(errorReporter);
-      return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
-    }
-
-    private async Task<DafnyDocument> GenerateProgramWithoutVerify(TextDocumentItem textDocument, CancellationToken cancellationToken){
-      var errorReporter = new BuildErrorReporter();
-      var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
-      var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
-      var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
-      DocumentPrinter.OutputProgramInfo(program);
-      // int StatementCount = DocumentPrinter.GetStatementCount(program, "module1", "foo");
-      // Console.WriteLine(">>>>>>>>>>>>>>>>>> # Statement: " + StatementCount + " <<<<<<<<<<<<<<<<<<");
-      return new DafnyDocument(textDocument, errorReporter, program, symbolTable, null);
-    }
-
     private async Task<DafnyDocument> GenerateProgramAssertionTestBasic(TextDocumentItem textDocument, CancellationToken cancellationToken){
       int begin = 0;    // Beginning of the target search range
       int end = 0;      // End of the target search range
@@ -169,8 +169,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
-  
-    private async Task<DafnyDocument> GenerateProgramAssertionTestAdvanced(TextDocumentItem textDocument, CancellationToken cancellationToken){
+      private async Task<DafnyDocument> GenerateProgramAssertionTestAdvanced(TextDocumentItem textDocument, CancellationToken cancellationToken){
       int begin = 0;    // Beginning of the target search range
       int end = 0;      // End of the target search range
       string ModuleName = "module1";
@@ -242,5 +241,23 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }  
+
+    /***************   TIME OUT METHODS: *************/
+
+    private async Task<DafnyDocument> GenerateProgramRecordInfo(TextDocumentItem textDocument, CancellationToken cancellationToken){
+      var errorReporter = new BuildErrorReporter();
+      var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
+      var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
+      var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
+      _notificationPublisher.Started(textDocument);
+      var serializedCounterExamples = await _verifier.VerifyAsyncRecordInfo(program, cancellationToken);
+      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
+      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
+    }
+  
+  
+  
   }
 }
