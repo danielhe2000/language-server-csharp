@@ -53,22 +53,22 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
         }*/
 
         public static void RemoveLastLineOfFOO(Dafny.Program program){
-            Console.WriteLine("Program module signature size: " + program.ModuleSigs.Count);
+            // Console.WriteLine("Program module signature size: " + program.ModuleSigs.Count);
             int module_count = 0;
             foreach(ModuleDefinition module in program.ModuleSigs.Keys){
-                Console.WriteLine("   Module "+module_count+" full name: " + module.FullName);
+                // Console.WriteLine("   Module "+module_count+" full name: " + module.FullName);
                 int callable_count = 0;
                 foreach(ICallable callable in module.CallGraph.vertices.Keys){
                     var corresVertex = module.CallGraph.vertices[callable];
-                    Console.WriteLine("     Callable "+callable_count+" name: " + callable.NameRelativeToModule);
+                    // Console.WriteLine("     Callable "+callable_count+" name: " + callable.NameRelativeToModule);
                     if(callable.WhatKind == "lemma"){
                         var LemmaCallable = (Lemma)callable;
                         var Body = LemmaCallable.methodBody;
-                        Console.WriteLine("     Callable "+callable_count+" #statement " + Body.Body.Count);
+                        // Console.WriteLine("     Callable "+callable_count+" #statement " + Body.Body.Count);
                         // Try to remove the last assertion of foo
                         if(callable.NameRelativeToModule == "foo"){
                             Body.Body.Remove(Body.Body.Last());
-                            Console.WriteLine("     Callable "+callable_count+" #statement after deletion " + Body.Body.Count);
+                            // Console.WriteLine("     Callable "+callable_count+" #statement after deletion " + Body.Body.Count);
                         }
                     }
                     ++ callable_count;
@@ -189,13 +189,12 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             return Start;
         }
 
-        public static void CopyToken(Token Old, Token New){
+        public static void CopyToken(IToken Old, IToken New){
             New.kind = Old.kind;
             New.pos = Old.pos;
             New.col = Old.col;
             New.line = Old.line;
             New.val = Old.val;
-            
         }
 
 

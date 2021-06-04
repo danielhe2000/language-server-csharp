@@ -43,10 +43,6 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           // TODO This may be subject to change. See Microsoft.Boogie.Counterexample
           //      A dash means write to the textwriter instead of a file.
           // https://github.com/boogie-org/boogie/blob/b03dd2e4d5170757006eef94cbb07739ba50dddb/Source/VCGeneration/Couterexample.cs#L217
-          // string [] Arguments = {"/noCheating:1"};
-          // Console.WriteLine(Arguments[0]);
-          // DafnyOptions.O.Parse(Arguments);
-          // Console.WriteLine("Do we have proc? " + DafnyOptions.O.UserConstrainedProcsToCheck);
           DafnyOptions.O.ModelViewFile = "-";
           DafnyOptions.O.TimeLimit = 2;
           
@@ -72,7 +68,6 @@ namespace Microsoft.Dafny.LanguageServer.Language {
         ExecutionEngine.printer = printer;
         var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
         foreach(var (CompileName, boogieProgram) in translated) {
-          // Console.WriteLine("------------------ Compile name of current boogie program is: " + CompileName  + "---------");
           cancellationToken.ThrowIfCancellationRequested();
           VerifyWithBoogie(boogieProgram, cancellationToken);
         }
@@ -103,11 +98,12 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           cancellationToken.ThrowIfCancellationRequested();
           VerifyWithBoogie(boogieProgram, cancellationToken);
         }
-        Console.WriteLine(">>>>>>>>>>>>>> Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
-        Console.WriteLine(">>>>>>>>>>>>>> Callable Info Count: " + callableInfo.Count + "<<<<<<<<<<<<<<");
+        // Console.WriteLine(">>>>>>>>>>>>>> Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
+        // Console.WriteLine(">>>>>>>>>>>>>> Callable Info Count: " + callableInfo.Count + "<<<<<<<<<<<<<<");
+        /*
         for(int i = 0; i < callableName.Count; ++i){
           Console.WriteLine(">>>>>>>>>>> Callable #"+i+": " + callableName[i].Item1 + ".__default." + callableName[i].Item2 + ", Status: " + callableInfo[i]);
-        }
+        }*/
         return printer.SerializedCounterExamples;
       } finally {
         _mutex.Release();
@@ -121,18 +117,14 @@ namespace Microsoft.Dafny.LanguageServer.Language {
         _logger.LogDebug("skipping program verification since the parser or resolvers already reported errors");
         return null;
       }
-      Console.WriteLine("User Constrained Procs To Check?" + DafnyOptions.O.UserConstrainedProcsToCheck);
       await _mutex.WaitAsync(cancellationToken);
       try {
         // The printer is responsible for two things: It logs boogie errors and captures the counter example model.
         var errorReporter = program.reporter;
-        // List<Tuple<string, string> > callableName = new List<Tuple<string, string> >();
-        // List<string> callableInfo = new List<string>();
-        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter,callableName, callableInfo);
+        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter, callableName, callableInfo);
         ExecutionEngine.printer = printer;
         var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
         foreach(var (CompileName, boogieProgram) in translated) {
-          // Console.WriteLine("------------------ Compile name of current boogie program is: " + CompileName  + "---------");
           cancellationToken.ThrowIfCancellationRequested();
           VerifyWithBoogie(boogieProgram, cancellationToken);
         }
@@ -140,6 +132,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       } finally {
         _mutex.Release();
       }
+      
     }
 
     public async Task<string?> VerifyAsyncRecordInfoSpecifyName(Dafny.Program program, CancellationToken cancellationToken, 
@@ -147,7 +140,6 @@ namespace Microsoft.Dafny.LanguageServer.Language {
                                                                 string ModuleName, string LemmaName) {
       if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
         // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
-
         _logger.LogDebug("skipping program verification since the parser or resolvers already reported errors");
         return null;
       }
@@ -194,7 +186,6 @@ namespace Microsoft.Dafny.LanguageServer.Language {
 
     private void CancelVerification(string requestId) {
       _logger.LogDebug("requesting verification cancellation of {}", requestId);
-      Console.WriteLine("requesting verification cancellation of {}", requestId);
       ExecutionEngine.CancelRequest(requestId);
     }
 
@@ -239,7 +230,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
 
       public void Inform(string s, TextWriter tw) {
         // Console.WriteLine(">>>>>>>>>>>>>>>> Inform: \"" +s+"\" <<<<<<<<<<<<<<<<<");
-        _mutex.Wait();
+        // _mutex.Wait();
         string pattern = @"^Verifying [A-Za-z]+\$\$(?<ModuleName>\w+).__default.(?<CallableName>\w+) ...$";
         foreach (Match match in Regex.Matches(s, pattern)){
             // Console.WriteLine(match.Value);
@@ -256,7 +247,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
             _callableName.RemoveAt(_callableName.Count - 1);
           }
         }
-        _mutex.Release();
+        // _mutex.Release();
         _logger.LogInformation(s);
       }
 
