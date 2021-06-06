@@ -76,7 +76,11 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 ++module_count;
             }
         }
-        public static void RemoveLemmaLines(Dafny.Program program, string LemmaName, string ModuleName, int Start){
+        public static void RemoveLemmaLines(Dafny.Program program, string LemmaName, string ClassName, string ModuleName, int Start){
+            if(ClassName == ""){
+                ClassName = "__default";
+            }
+            var FullName = ModuleName + "." + ClassName + "." + LemmaName;
             // Console.WriteLine("Program module signature size: " + program.ModuleSigs.Count);
             foreach(ModuleDefinition module in program.ModuleSigs.Keys){
                 if(module.FullName != ModuleName) continue;
@@ -85,7 +89,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                     var corresVertex = module.CallGraph.vertices[callable];
                     // Console.WriteLine("     Callable "+callable_count+" name: " + callable.NameRelativeToModule);
                     if(callable.WhatKind != "lemma") continue;
-                    if(callable.NameRelativeToModule != LemmaName) continue;
+                    if(callable.FullSanitizedName != FullName) continue;
                     var LemmaCallable = (Lemma)callable;
                     var Body = LemmaCallable.methodBody;
                     // Console.WriteLine("     Callable "+callable_count+" #statement " + Body.Body.Count);
@@ -99,8 +103,12 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             }
         }
 
-        public static void RemoveLemmaLinesFlattened(Dafny.Program program, string LemmaName, string ModuleName, int Start){
+        public static void RemoveLemmaLinesFlattened(Dafny.Program program, string LemmaName, string ClassName, string ModuleName, int Start){
             // Console.WriteLine("Program module signature size: " + program.ModuleSigs.Count);
+            if(ClassName == ""){
+                ClassName = "__default";
+            }
+            var FullName = ModuleName + "." + ClassName + "." + LemmaName;
             foreach(ModuleDefinition module in program.ModuleSigs.Keys){
                 if(module.FullName != ModuleName) continue;
                 //Console.WriteLine("   Module "+module_count+" full name: " + module.FullName);
@@ -108,7 +116,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                     var corresVertex = module.CallGraph.vertices[callable];
                     // Console.WriteLine("     Callable "+callable_count+" name: " + callable.NameRelativeToModule);
                     if(callable.WhatKind != "lemma") continue;
-                    if(callable.NameRelativeToModule != LemmaName) continue;
+                    if(callable.FullSanitizedName != FullName) continue;
                     var LemmaCallable = (Lemma)callable;
                     var Body = LemmaCallable.methodBody;
                     int result = RemoveLemmaLinesFlattenedHelper(Body.Body, Start);

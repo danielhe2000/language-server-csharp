@@ -48,6 +48,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             foreach(ICallable callable in module.CallGraph.vertices.Keys){
                 var corresVertex = module.CallGraph.vertices[callable];
                 Console.WriteLine("     Callable "+CallableCount+" kind: " + callable.WhatKind);
+                Console.WriteLine("     Callable "+CallableCount+" Full Sanitized Name: " + callable.FullSanitizedName);
                 Console.WriteLine("     Callable "+CallableCount+" name: " + callable.NameRelativeToModule);
                 Console.WriteLine("     Callable "+CallableCount+" #succesor: " + corresVertex.Successors.Count);
                 if(callable.WhatKind == "lemma"){
@@ -148,11 +149,15 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             }
         }
     
-        public static int GetStatementCount(Dafny.Program program, string ModuleName, string LemmaName){
+        public static int GetStatementCount(Dafny.Program program, string ModuleName, string ClassName, string LemmaName){
+            if(ClassName == ""){
+                ClassName = "__default";
+            }
+            var FullName = ModuleName + "." + ClassName + "." + LemmaName;
             foreach(ModuleDefinition module in program.ModuleSigs.Keys){
                 if(module.FullName != ModuleName) continue;
                 foreach(ICallable callable in module.CallGraph.vertices.Keys){
-                    if(callable.WhatKind != "lemma" || callable.NameRelativeToModule != LemmaName) continue;
+                    if(callable.WhatKind != "lemma" || callable.FullSanitizedName != FullName) continue;
                     var LemmaCallable = (Lemma)callable;
                     var Body = LemmaCallable.Body.Body;
                     if(Body == null) return 0;
@@ -180,11 +185,15 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             return result;
         }
 
-        public static Statement GetStatement(Dafny.Program program, string ModuleName, string LemmaName, int Location){
+        public static Statement GetStatement(Dafny.Program program, string ModuleName, string ClassName, string LemmaName, int Location){
+            if(ClassName == ""){
+                ClassName = "__default";
+            }
+            var FullName = ModuleName + "." + ClassName + "." + LemmaName;
             foreach(ModuleDefinition module in program.ModuleSigs.Keys){
                 if(module.FullName != ModuleName) continue;
                 foreach(ICallable callable in module.CallGraph.vertices.Keys){
-                    if(callable.WhatKind != "lemma" || callable.NameRelativeToModule != LemmaName) continue;
+                    if(callable.WhatKind != "lemma" || callable.FullSanitizedName != FullName) continue;
                     var LemmaCallable = (Lemma)callable;
                     var Body = LemmaCallable.Body.Body;
                     var End = GetStatementHelper(Body, Location, out var Result);
@@ -194,11 +203,15 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             return null;
         }
 
-        public static ICallable GetCallable(Dafny.Program program, string ModuleName, string LemmaName){
+        public static ICallable GetCallable(Dafny.Program program, string ModuleName, string ClassName, string LemmaName){
+            if(ClassName == ""){
+                ClassName = "__default";
+            }
+            var FullName = ModuleName + "." + ClassName + "." + LemmaName;
             foreach(ModuleDefinition module in program.ModuleSigs.Keys){
                 if(module.FullName != ModuleName) continue;
                 foreach(ICallable callable in module.CallGraph.vertices.Keys){
-                    if(callable.WhatKind != "lemma" || callable.NameRelativeToModule != LemmaName) continue;
+                    if(callable.FullSanitizedName != FullName) continue;
                     return callable;
                 }
             }

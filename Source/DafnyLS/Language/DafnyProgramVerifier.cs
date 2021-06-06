@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 
@@ -45,6 +46,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           // https://github.com/boogie-org/boogie/blob/b03dd2e4d5170757006eef94cbb07739ba50dddb/Source/VCGeneration/Couterexample.cs#L217
           DafnyOptions.O.ModelViewFile = "-";
           DafnyOptions.O.TimeLimit = 2;
+          DafnyOptions.O.ArithMode = 5;
           
           _initialized = true;
           logger.LogTrace("initialized the boogie verifier...");
@@ -88,7 +90,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       try {
         // The printer is responsible for two things: It logs boogie errors and captures the counter example model.
         var errorReporter = program.reporter;
-        List<Tuple<string, string> > callableName = new List<Tuple<string, string> >();
+        List<Tuple<string, string, string> > callableName = new List<Tuple<string, string, string> >();
         List<string> callableInfo = new List<string>();
         var printer = new ModelCapturingOutputPrinter(_logger, errorReporter,callableName, callableInfo);
         ExecutionEngine.printer = printer;
@@ -98,11 +100,12 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           cancellationToken.ThrowIfCancellationRequested();
           VerifyWithBoogie(boogieProgram, cancellationToken);
         }
-        // Console.WriteLine(">>>>>>>>>>>>>> Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
-        // Console.WriteLine(">>>>>>>>>>>>>> Callable Info Count: " + callableInfo.Count + "<<<<<<<<<<<<<<");
         /*
+        Console.WriteLine(">>>>>>>>>>>>>> Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
+        Console.WriteLine(">>>>>>>>>>>>>> Callable Info Count: " + callableInfo.Count + "<<<<<<<<<<<<<<");
+        
         for(int i = 0; i < callableName.Count; ++i){
-          Console.WriteLine(">>>>>>>>>>> Callable #"+i+": " + callableName[i].Item1 + ".__default." + callableName[i].Item2 + ", Status: " + callableInfo[i]);
+          Console.WriteLine(">>>>>>>>>>> Callable #"+i+": " + callableName[i].Item1 + "." + callableName[i].Item2 + "." + callableName[i].Item3 + ", Status: " + callableInfo[i]);
         }*/
         return printer.SerializedCounterExamples;
       } finally {
@@ -111,7 +114,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
     }
     
     public async Task<string?> VerifyAsyncRecordInfo(Dafny.Program program, CancellationToken cancellationToken, 
-                                                    List<Tuple<string, string> > callableName, List<string> callableInfo) {
+                                                    List<Tuple<string, string, string> > callableName, List<string> callableInfo) {
       if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
         // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
         _logger.LogDebug("skipping program verification since the parser or resolvers already reported errors");
@@ -136,8 +139,8 @@ namespace Microsoft.Dafny.LanguageServer.Language {
     }
 
     public async Task<string?> VerifyAsyncRecordInfoSpecifyName(Dafny.Program program, CancellationToken cancellationToken, 
-                                                                List<Tuple<string, string> > callableName, List<string> callableInfo,
-                                                                string ModuleName, string LemmaName) {
+                                                                List<Tuple<string, string, string> > callableName, List<string> callableInfo,
+                                                                string ModuleName, string ClassName, string LemmaName) {
       if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
         // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
         _logger.LogDebug("skipping program verification since the parser or resolvers already reported errors");
@@ -145,7 +148,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
       await _mutex.WaitAsync(cancellationToken);
       try {
-        string toBeChecked = "*" + ModuleName + ".__default." + LemmaName;
+        string toBeChecked = "*" + ModuleName + "." + ClassName + "." + LemmaName;
         DafnyOptions.O.procsToCheck.Add(toBeChecked);
         // Console.WriteLine("User Constrained Procs To Check?" + DafnyOptions.O.UserConstrainedProcsToCheck);
         
@@ -193,13 +196,12 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       private readonly ILogger _logger;
       private readonly ErrorReporter _errorReporter;
       private StringBuilder? _serializedCounterExamples;
-      private List<Tuple<string, string> > _callableName = new List<Tuple<string, string> >();
-      private List<string> _callableInfo = new List<string>();
+      private List<Tuple<string, string, string> > _CallableName = new List<Tuple<string, string, string> >();
+      private List<Tuple<string, string, string> > _TimeoutCallableName = new List<Tuple<string, string, string> >();
+      private List<string> _TimeoutCallableInfo = new List<string>();
+      private List<long> _CallableTime = new List<long>();
       private readonly SemaphoreSlim _mutex = new SemaphoreSlim(1);
-      // private string TargetModuleName = "";
-      // private string TargetLemmaName = "";
-      // private string TargetStatus = "";
-      // private bool hasTarget = false;
+      private Stopwatch sw = new Stopwatch();
 
       public string? SerializedCounterExamples => _serializedCounterExamples?.ToString();
 
@@ -208,11 +210,23 @@ namespace Microsoft.Dafny.LanguageServer.Language {
         _errorReporter = errorReporter;
       }
 
-      public ModelCapturingOutputPrinter(ILogger logger, ErrorReporter errorReporter, List<Tuple<string, string> > callableName, List<string> callableInfo) {
+      public ModelCapturingOutputPrinter(ILogger logger, ErrorReporter errorReporter, 
+                                         List<Tuple<string, string, string> > TimeoutCallableName, List<string> TimeoutCallableInfo) {
         _logger = logger;
         _errorReporter = errorReporter;
-        _callableName = callableName;
-        _callableInfo = callableInfo;
+        _TimeoutCallableName = TimeoutCallableName;
+        _TimeoutCallableInfo = TimeoutCallableInfo;
+      }
+
+      public ModelCapturingOutputPrinter(ILogger logger, ErrorReporter errorReporter, 
+                                         List<Tuple<string, string, string> > TimeoutCallableName, List<string> TimeoutCallableInfo, 
+                                         List<Tuple<string, string, string> > CallableName, List<long> CallableTime) {
+        _logger = logger;
+        _errorReporter = errorReporter;
+        _TimeoutCallableName = TimeoutCallableName;
+        _TimeoutCallableInfo = TimeoutCallableInfo;
+        _CallableName = CallableName;
+        _CallableTime = CallableTime;
       }
 
       public void AdvisoryWriteLine(string format, params object[] args) {
@@ -231,20 +245,27 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       public void Inform(string s, TextWriter tw) {
         // Console.WriteLine(">>>>>>>>>>>>>>>> Inform: \"" +s+"\" <<<<<<<<<<<<<<<<<");
         // _mutex.Wait();
-        string pattern = @"^Verifying [A-Za-z]+\$\$(?<ModuleName>\w+).__default.(?<CallableName>\w+) ...$";
+        string pattern = @"^Verifying [A-Za-z]+\$\$(?<ModuleName>\w+).(?<ClassName>\w+).(?<CallableName>\w+) ...$";
         foreach (Match match in Regex.Matches(s, pattern)){
             // Console.WriteLine(match.Value);
+            sw.Start();
             GroupCollection groups = match.Groups;
-            _callableName.Add(Tuple.Create<string, string>(groups["ModuleName"].ToString(), groups["CallableName"].ToString()));
+            _TimeoutCallableName.Add(Tuple.Create<string, string, string>(groups["ModuleName"].ToString(), groups["ClassName"].ToString(), groups["CallableName"].ToString()));
+            _CallableName.Add(Tuple.Create<string, string, string>(groups["ModuleName"].ToString(), groups["ClassName"].ToString(), groups["CallableName"].ToString()));
             // Console.WriteLine(">>>>>>>>>>>>>>>> Module name: " + groups["ModuleName"]);
             // Console.WriteLine(">>>>>>>>>>>>>>>> Callable name: " + groups["CallableName"]);
         }
-        if((s == "verified" || s == "timed out" || s == "error") && _callableName.Count - _callableInfo.Count == 1){
+        if((s == "verified" || s == "timed out" || s == "error") && _TimeoutCallableName.Count - _TimeoutCallableInfo.Count == 1){
+          if(sw.IsRunning){
+            sw.Stop();
+            _CallableTime.Add(sw.ElapsedMilliseconds);
+            sw.Reset();
+          }
           if(s == "timed out"){
-            _callableInfo.Add(s);
+            _TimeoutCallableInfo.Add(s);
           }
           else{
-            _callableName.RemoveAt(_callableName.Count - 1);
+            _TimeoutCallableName.RemoveAt(_TimeoutCallableName.Count - 1);
           }
         }
         // _mutex.Release();

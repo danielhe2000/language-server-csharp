@@ -1,6 +1,7 @@
 module module1 {
     datatype Step = GetStep(key:int, value:int) | PutStep(key:int, value:int) | OtherStep(key:int, value: int)
     
+    
     lemma foo() 
     {
         var a := PutStep(2,3);
@@ -26,5 +27,12 @@ module module1 {
             }
         }
         assert true;
+    }
+
+    lemma Lemma_LEnvironmentInitEstablishesInvariant<K, V>(a:map<K,V>, b:map<K,V>)
+        requires a == b
+        requires a == b
+        ensures  a == b
+    {
     }
 }
