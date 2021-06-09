@@ -48,6 +48,9 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           DafnyOptions.O.TimeLimit = 2;
           DafnyOptions.O.ArithMode = 5;
           DafnyOptions.O.DisableNLarith = true;
+          // DafnyOptions.O.SetZ3Option("smt.qi.profile","true");
+          // DafnyOptions.O.SetZ3Option("smt.qi.profile_freq","1000");
+          // DafnyOptions.O.procsToCheck.Add("*RefinementNext");
           
           _initialized = true;
           logger.LogTrace("initialized the boogie verifier...");
@@ -218,6 +221,8 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
 
       public void AdvisoryWriteLine(string format, params object[] args) {
+        // Console.WriteLine(">>>>>>>>>>>>>>>> ErrorWriteLine <<<<<<<<<<<<<<<<<");
+        // Console.WriteLine(format);
       }
 
       public void ErrorWriteLine(TextWriter tw, string s) {
@@ -260,6 +265,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
 
       public void ReportBplError(IToken tok, string message, bool error, TextWriter tw, [AllowNull] string category) {
         // Console.WriteLine(">>>>>>>>>>>>>>>> Report BPL Error <<<<<<<<<<<<<<<<<");
+        // Console.WriteLine(message);
         _logger.LogError(message);
       }
 
@@ -292,6 +298,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
 
       public void WriteTrailer(PipelineStatistics stats) {
+        // Console.WriteLine(">>>>>>>>>>>>>>>> WriteTrailer <<<<<<<<<<<<<<<<<");
       }
     }
   }
