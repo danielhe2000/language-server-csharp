@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.Boogie;
+using System.Diagnostics;
 using System.Linq;
 using System;
 
@@ -32,7 +33,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
 
     public async Task<DafnyDocument> LoadAsync(TextDocumentItem textDocument, bool verify, CancellationToken cancellationToken) {
       if(verify){
-        return await GenerateProgramWithTimeoutTest(textDocument ,cancellationToken);
+        return await GenerateProgramWithTimeout(textDocument ,cancellationToken);
       }
       else{
         return await GenerateProgramWithoutVerify(textDocument, cancellationToken);
@@ -57,7 +58,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
-      DocumentPrinter.OutputProgramInfo(program);
+      // DocumentPrinter.OutputProgramInfo(program);
       // int StatementCount = DocumentPrinter.GetStatementCount(program, "module1", "foo");
       // Console.WriteLine(">>>>>>>>>>>>>>>>>> # Statement: " + StatementCount + " <<<<<<<<<<<<<<<<<<");
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, null);
@@ -251,30 +252,53 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
 
     
 
-    private async Task<DafnyDocument> GenerateProgramWithTimeoutTest(TextDocumentItem textDocument, CancellationToken cancellationToken){
+    private async Task<DafnyDocument> GenerateProgramWithTimeout(TextDocumentItem textDocument, CancellationToken cancellationToken){
       var errorReporter = new BuildErrorReporter();
       var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       _notificationPublisher.Started(textDocument);
       List<Tuple<string, string, string> > callableName = new List<Tuple<string, string, string> >();
-      List<string> callableInfo = new List<string>();
-      List<int> timeoutLines = new List<int>();
-      var serializedCounterExamples = await _verifier.VerifyAsyncRecordInfo(program, cancellationToken, callableName, callableInfo);
+      List<long> callableTime = new List<long>();
+      Dictionary<ICallable, long> callableTotalTime = new Dictionary<ICallable, long>();
+      // List<int> timeoutLines = new List<int>();
+      var serializedCounterExamples = await _verifier.VerifyAsyncRecordInfo(program, cancellationToken, callableName, callableTime);
       
-      // TODO: 
-      //Console.WriteLine(">>>>>>>>>>>>>> Timeout Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
-      //Console.WriteLine(">>>>>>>>>>>>>> Timeout Callable Info Count: " + callableInfo.Count + "<<<<<<<<<<<<<<");
-      var TimeoutFound = (callableName.Count != 0);
+      /*
+      Console.WriteLine(">>>>>>>>>>>>>> Timeout Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
+      Console.WriteLine(">>>>>>>>>>>>>> Timeout Callable Info Count: " + callableTime.Count + "<<<<<<<<<<<<<<");
       for(int i = 0; i < callableName.Count; ++i){
         string ModuleName = callableName[i].Item1;
         string ClassName = callableName[i].Item2;
         string LemmaName = callableName[i].Item3;
+        Console.WriteLine(">>>>>>>>>>" + ModuleName + "." + ClassName + "." + LemmaName + ": " + callableTime[i] + "ms");
+      }*/
+      
+      var TimeoutFound = false;
+      for(int i = 0; i < callableName.Count; ++i){
+        string ModuleName = callableName[i].Item1;
+        string ClassName = callableName[i].Item2;
+        string LemmaName = callableName[i].Item3;
+        var TargetCallable = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
+        if(TargetCallable == null) continue;
+        if(callableTime[i] > 0){
+          // Console.WriteLine(">>>>>>>>>>" + ModuleName + "." + ClassName + "." + LemmaName + ": " + callableTime[i] + "ms");
+          if(callableTotalTime.ContainsKey(TargetCallable)){
+            callableTotalTime[TargetCallable] += callableTime[i];
+          }
+          else{
+            callableTotalTime.Add(TargetCallable, callableTime[i]);
+          }
+          continue;
+        }
+        else if(callableTotalTime.ContainsKey(TargetCallable)){
+          callableTotalTime.Remove(TargetCallable);
+        }
+        TimeoutFound = true;
         int begin = 0;    // Beginning of the target search range
         int end = DocumentPrinter.GetStatementCount(program, ModuleName, ClassName, LemmaName);      // End of the target search range
         if(end == 0){
           // Console.WriteLine("The timeout lemma has no body / the timeout callable is not a lemma");
-          var TargetCallable = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
           // var CallableRange = TargetCallable.Tok.GetLspRange();
           Token TimeoutToken = new Token();
           DocumentModifier.CopyToken(TargetCallable.Tok, TimeoutToken);
@@ -284,16 +308,20 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         // Console.WriteLine(">>>>>>>>>>> Current Lemma "+LemmaName + " has #statement " + end);
         while(begin < end){
           int middle = (begin + end) / 2;
+          var TimeoutResultTask = TruncateAndCheckTimeOut(textDocument, middle, ModuleName, LemmaName, ClassName, cancellationToken);
+          bool NoTimeout = await TimeoutResultTask;
+          /*
           // Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Current middle: " + middle + "<<<<<<<<<<<<<<<<<<<<<<<<");
           List<Tuple<string, string, string> > TempCallableName = new List<Tuple<string, string, string> >();
-          List<string> TempCallableInfo = new List<string>();
+          List<long> TempCallableInfo = new List<long>();
           var TempErrorReporter = new BuildErrorReporter();
           var TempProgram = await _parser.ParseAsync(textDocument, TempErrorReporter, cancellationToken);
           var TempCompilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, TempProgram, cancellationToken);
           DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,LemmaName,ClassName,ModuleName,middle);
           // Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, ClassName, LemmaName));
-          var temp = _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, cancellationToken, TempCallableName, TempCallableInfo, ModuleName,ClassName,LemmaName);
-          if(TempCallableInfo.Count == 0){
+          var temp = await _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, cancellationToken, TempCallableName, TempCallableInfo, ModuleName,ClassName,LemmaName);
+          // Console.WriteLine(">>>>>>>>>>> TempCallableInfo Size" + TempCallableInfo.Count);*/
+          if(NoTimeout){
             begin = middle + 1;
           }
           else{
@@ -318,11 +346,230 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         }
         // Console.WriteLine("~~~~~~~~~~~~~ Module " + ModuleName + ", Lemma: " + LemmaName + " timeout range: " + Range.Start + " to " + Range.End + " ~~~~~~~~~~");
       }
+
       // DocumentPrinter.OutputErrorInfo(errorReporter);
-      _notificationPublisher.Completed(textDocument, (serializedCounterExamples == null) && !TimeoutFound);
+      foreach(var item in callableTotalTime){
+        var TargetCallable = item.Key;
+        var Time = item.Value;
+        Token TimeoutToken = new Token();
+        DocumentModifier.CopyToken(TargetCallable.Tok, TimeoutToken);
+        errorReporter.AllMessages[ErrorLevel.Info].Add(new ErrorMessage {token = TimeoutToken, message = Time + " ms spent on verifying this callable", source = MessageSource.Other});
+      }
+      _notificationPublisher.Completed(textDocument, (serializedCounterExamples == null) && (!TimeoutFound));
       // DocumentPrinter.OutputErrorInfo(errorReporter);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
     /**/
+    private async Task<DafnyDocument> GenerateProgramWithTimeoutMultiThread(TextDocumentItem textDocument, CancellationToken cancellationToken){
+      var errorReporter = new BuildErrorReporter();
+      var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
+      var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
+      var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
+      _notificationPublisher.Started(textDocument);
+      List<Tuple<string, string, string> > callableName = new List<Tuple<string, string, string> >();
+      List<long> callableTime = new List<long>();
+      Dictionary<ICallable, long> callableTotalTime = new Dictionary<ICallable, long>();
+      // List<int> timeoutLines = new List<int>();
+      var serializedCounterExamples = await _verifier.VerifyAsyncRecordInfo(program, cancellationToken, callableName, callableTime);
+      
+      var TimeoutFound = false;
+      for(int i = 0; i < callableName.Count; ++i){
+        string ModuleName = callableName[i].Item1;
+        string ClassName = callableName[i].Item2;
+        string LemmaName = callableName[i].Item3;
+        var TargetCallable = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
+        if(callableTime[i] > 0){
+          // Console.WriteLine(">>>>>>>>>>" + ModuleName + "." + ClassName + "." + LemmaName + ": " + callableTime[i] + "ms");
+          if(callableTotalTime.ContainsKey(TargetCallable)){
+            callableTotalTime[TargetCallable] += callableTime[i];
+          }
+          else{
+            callableTotalTime.Add(TargetCallable, callableTime[i]);
+          }
+          continue;
+        }
+        else if(callableTotalTime.ContainsKey(TargetCallable)){
+          callableTotalTime.Remove(TargetCallable);
+        }
+        TimeoutFound = true;
+        int begin = 0;    // Beginning of the target search range
+        int end = DocumentPrinter.GetStatementCount(program, ModuleName, ClassName, LemmaName);      // End of the target search range
+        if(end == 0){
+          // Console.WriteLine("The timeout lemma has no body / the timeout callable is not a lemma");
+          // var CallableRange = TargetCallable.Tok.GetLspRange();
+          Token TimeoutToken = new Token();
+          DocumentModifier.CopyToken(TargetCallable.Tok, TimeoutToken);
+          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "This callable causes a time-out", source = MessageSource.Other});
+          continue;
+        }
+        // Console.WriteLine(">>>>>>>>>>> Current Lemma "+LemmaName + " has #statement " + end);
+        while(begin < end){
+          int middle1 = begin + (end-begin)/3;
+          int middle2 = begin + (end-begin)*2/3;
+          Console.WriteLine(">>>>>>>>>>> Current Lemma "+LemmaName);
+          // Console.WriteLine(">>>>>>>>>>> Current Begin "+begin);
+          // Console.WriteLine(">>>>>>>>>>> Current End "+end);
+          // Console.WriteLine(">>>>>>>>>>> Current Middle1 "+middle1);
+          // Console.WriteLine(">>>>>>>>>>> Current Middle2 "+middle2);
+          Stopwatch sw = new Stopwatch();
+          sw.Start();
+          /*Console.WriteLine("============= Main thread ID is :" + Thread.CurrentThread.ManagedThreadId);
+          var TimeoutResultTask1 = TruncateAndCheckTimeOut(textDocument, middle1, ModuleName, LemmaName, ClassName, cancellationToken);
+          var TimeoutResultTask2 = TruncateAndCheckTimeOut(textDocument, middle2, ModuleName, LemmaName, ClassName, cancellationToken);
+          // TimeoutResultTask1.Start();
+          // TimeoutResultTask2.Start();
+          bool NoTimeout1 = TimeoutResultTask1.Result;
+          bool NoTimeout2 = TimeoutResultTask2.Result;*/
+
+          MultiTreadHelper mth = new MultiTreadHelper(_parser, _symbolResolver, _verifier, textDocument, ModuleName, ClassName, LemmaName, middle1, middle2, cancellationToken);
+          Thread t1 = new Thread(new ThreadStart(mth.TruncateAndCheckFirstHalf));
+          Thread t2 = new Thread(new ThreadStart(mth.TruncateAndCheckSecondHalf));
+          t1.IsBackground = true;
+          t2.IsBackground = true;
+          t1.Start();
+          t2.Start();
+          t1.Join();
+          t2.Join();
+          Console.WriteLine(">>>>>>> After verifying, elapsed time is: " + sw.ElapsedMilliseconds);
+          /*
+          if(NoTimeout2){
+            begin = middle2 + 1;
+          }
+          else if(NoTimeout1){
+            begin = middle1 + 1;
+            end = middle2;
+          }
+          else{
+            end = middle1;
+          }*/
+          if(mth.result2){
+            begin = middle2 + 1;
+          }
+          else if(mth.result1){
+            begin = middle1 + 1;
+            end = middle2;
+          }
+          else{
+            end = middle1;
+          }
+        }
+        int TargetLine = begin - 1;
+        var Target = DocumentPrinter.GetStatement(program, ModuleName, ClassName, LemmaName,TargetLine);
+        // OmniSharp.Extensions.LanguageServer.Protocol.Models.Range Range;
+        if(Target != null){
+          var Range = Target.Tok.GetLspRange();
+          Token TimeoutToken = new Token();
+          DocumentModifier.CopyToken(Target.Tok, TimeoutToken);
+          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "This line causes a time-out", source = MessageSource.Other});
+          Console.WriteLine("~~~~~~~~~~~~~ Module " + ModuleName + ", Lemma: " + LemmaName + " timeout range: " + Range.Start + " to " + Range.End + " ~~~~~~~~~~");
+        }
+        else{
+          var TargetLemma = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
+          var Range = TargetLemma.Tok.GetLspRange();
+          Token TimeoutToken = new Token();
+          DocumentModifier.CopyToken(TargetLemma.Tok, TimeoutToken);
+          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "The post-condition of this lemma causes a time-out", source = MessageSource.Other});
+          Console.WriteLine("~~~~~~~~~~~~~ Module " + ModuleName + ", Lemma: " + LemmaName + " timeout range: " + Range.Start + " to " + Range.End + " ~~~~~~~~~~");
+        }
+        
+      }
+
+      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      foreach(var item in callableTotalTime){
+        var TargetCallable = item.Key;
+        var Time = item.Value;
+        Token TimeoutToken = new Token();
+        DocumentModifier.CopyToken(TargetCallable.Tok, TimeoutToken);
+        errorReporter.AllMessages[ErrorLevel.Info].Add(new ErrorMessage {token = TimeoutToken, message = Time + " ms spent on verifying this callable", source = MessageSource.Other});
+      }
+      _notificationPublisher.Completed(textDocument, (serializedCounterExamples == null) && (!TimeoutFound));
+      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
+    }
+    // Return true if there is no time-out
+    private async Task<bool> TruncateAndCheckTimeOut(TextDocumentItem textDocument, int Start, string ModuleName, string LemmaName, string ClassName, CancellationToken cancellationToken){
+      List<Tuple<string, string, string> > TempCallableName = new List<Tuple<string, string, string> >();
+      List<long> TempCallableInfo = new List<long>();
+      var TempErrorReporter = new BuildErrorReporter();
+      // Console.WriteLine("============= Start " + Start + " thread ID is :" + Thread.CurrentThread.ManagedThreadId);
+      var TempProgram = await _parser.ParseAsync(textDocument, TempErrorReporter, cancellationToken);
+      // Console.WriteLine(">>>>> Parse Start: " + Start);
+      var TempCompilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, TempProgram, cancellationToken);
+      // Console.WriteLine(">>>>> Resolve Start: " + Start);
+      DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,LemmaName,ClassName,ModuleName,Start);
+      // Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, ClassName, LemmaName));
+      var temp = await _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, cancellationToken, TempCallableName, TempCallableInfo, ModuleName,ClassName,LemmaName);
+      // Console.WriteLine(">>>>>>>>>>> TempCallableInfo Size" + TempCallableInfo.Count);
+      return (TempCallableInfo.Count == 0) || (TempCallableInfo.Count == 1 && TempCallableInfo[0] > 0) || (TempCallableInfo.Count == 2 && TempCallableInfo[1] > 0);
+    }
+  }
+
+  public class MultiTreadHelper{
+    private readonly IDafnyParser _parser;
+    private readonly ISymbolResolver _symbolResolver;
+    private readonly IProgramVerifier _verifier;
+    private TextDocumentItem _textDocument;
+    private string _ModuleName;
+    private string _ClassName;
+    private string _LemmaName;
+    private int _middle1;
+    private int _middle2;
+    private CancellationToken _cancellationToken;
+    public bool result1 = false;
+    public bool result2 = false;
+
+    public MultiTreadHelper(
+      IDafnyParser parser,
+      ISymbolResolver symbolResolver,
+      IProgramVerifier verifier,
+      TextDocumentItem textDocument,
+      string ModuleName,
+      string ClassName,
+      string LemmaName,
+      int middle1,
+      int middle2,
+      CancellationToken cancellationToken
+    ) {
+      _parser = parser;
+      _symbolResolver = symbolResolver;
+      _verifier = verifier;
+      _textDocument = textDocument;
+      _ModuleName = ModuleName;
+      _ClassName = ClassName;
+      _LemmaName = LemmaName;
+      _middle1 = middle1;
+      _middle2 = middle2;
+      _cancellationToken = cancellationToken;
+    }
+
+    public void TruncateAndCheckFirstHalf(){
+      List<Tuple<string, string, string> > TempCallableName = new List<Tuple<string, string, string> >();
+      List<long> TempCallableInfo = new List<long>();
+      var TempErrorReporter = new BuildErrorReporter();
+      Console.WriteLine("============= Start " + _middle1 + " thread ID is :" + Thread.CurrentThread.ManagedThreadId);
+      var TempProgram =  _parser.ParseAsync(_textDocument, TempErrorReporter, _cancellationToken).Result;
+      Console.WriteLine(">>>>> Parse Start: " + _middle1);
+      var TempCompilationUnit = _symbolResolver.ResolveSymbolsAsync(_textDocument, TempProgram, _cancellationToken).Result;
+      Console.WriteLine(">>>>> Resolve Start: " + _middle1);
+      DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,_LemmaName,_ClassName,_ModuleName,_middle1);
+      // Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, ClassName, LemmaName));
+      var temp = _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, _cancellationToken, TempCallableName, TempCallableInfo, _ModuleName,_ClassName,_LemmaName).Result;
+      result1 = (TempCallableInfo.Count == 0 || TempCallableInfo[0] > 0);
+    }
+    
+    public void TruncateAndCheckSecondHalf(){
+      List<Tuple<string, string, string> > TempCallableName = new List<Tuple<string, string, string> >();
+      List<long> TempCallableInfo = new List<long>();
+      var TempErrorReporter = new BuildErrorReporter();
+      Console.WriteLine("============= Start " + _middle2 + " thread ID is :" + Thread.CurrentThread.ManagedThreadId);
+      var TempProgram =  _parser.ParseAsync(_textDocument, TempErrorReporter, _cancellationToken).Result;
+      Console.WriteLine(">>>>> Parse Start: " + _middle2);
+      var TempCompilationUnit = _symbolResolver.ResolveSymbolsAsync(_textDocument, TempProgram, _cancellationToken).Result;
+      Console.WriteLine(">>>>> Resolve Start: " + _middle2);
+      DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,_LemmaName,_ClassName,_ModuleName,_middle2);
+      // Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, ClassName, LemmaName));
+      var temp = _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, _cancellationToken, TempCallableName, TempCallableInfo, _ModuleName,_ClassName,_LemmaName).Result;
+      result2 = (TempCallableInfo.Count == 0 || TempCallableInfo[0] > 0);
+    }
   }
 }

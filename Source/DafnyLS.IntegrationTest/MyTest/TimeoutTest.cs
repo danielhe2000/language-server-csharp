@@ -93,7 +93,7 @@ module module1 {
       Console.WriteLine("Number of errors: " + saveDiagnostics.Length);
       for(int i = 0; i < saveDiagnostics.Length; ++i){
         var Diagnostic = saveDiagnostics[i];
-        if(Diagnostic.Severity != DiagnosticSeverity.Error) continue;
+        if(Diagnostic.Severity == DiagnosticSeverity.Warning) continue;
         Console.WriteLine(Diagnostic.Message);
         Console.WriteLine(Diagnostic.Range.Start);
         Console.WriteLine(Diagnostic.Range.End);

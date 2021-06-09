@@ -1,7 +1,11 @@
 module module1 {
     datatype Step = GetStep(key:int, value:int) | PutStep(key:int, value:int) | OtherStep(key:int, value: int)
     
-    
+    lemma onlydeclair(){
+        var a := 1;
+        var b := 2;
+    }
+
     lemma foo() 
     {
         var a := PutStep(2,3);

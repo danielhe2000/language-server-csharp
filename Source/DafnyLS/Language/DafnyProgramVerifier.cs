@@ -47,6 +47,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           DafnyOptions.O.ModelViewFile = "-";
           DafnyOptions.O.TimeLimit = 2;
           DafnyOptions.O.ArithMode = 5;
+          DafnyOptions.O.DisableNLarith = true;
           
           _initialized = true;
           logger.LogTrace("initialized the boogie verifier...");
@@ -91,7 +92,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
         // The printer is responsible for two things: It logs boogie errors and captures the counter example model.
         var errorReporter = program.reporter;
         List<Tuple<string, string, string> > callableName = new List<Tuple<string, string, string> >();
-        List<string> callableInfo = new List<string>();
+        List<long> callableInfo = new List<long>();
         var printer = new ModelCapturingOutputPrinter(_logger, errorReporter,callableName, callableInfo);
         ExecutionEngine.printer = printer;
         var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
@@ -114,7 +115,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
     }
     
     public async Task<string?> VerifyAsyncRecordInfo(Dafny.Program program, CancellationToken cancellationToken, 
-                                                    List<Tuple<string, string, string> > callableName, List<string> callableInfo) {
+                                                    List<Tuple<string, string, string> > callableName, List<long> callableTime) {
       if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
         // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
         _logger.LogDebug("skipping program verification since the parser or resolvers already reported errors");
@@ -124,7 +125,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       try {
         // The printer is responsible for two things: It logs boogie errors and captures the counter example model.
         var errorReporter = program.reporter;
-        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter, callableName, callableInfo);
+        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter, callableName, callableTime);
         ExecutionEngine.printer = printer;
         var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
         foreach(var (CompileName, boogieProgram) in translated) {
@@ -139,7 +140,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
     }
 
     public async Task<string?> VerifyAsyncRecordInfoSpecifyName(Dafny.Program program, CancellationToken cancellationToken, 
-                                                                List<Tuple<string, string, string> > callableName, List<string> callableInfo,
+                                                                List<Tuple<string, string, string> > callableName, List<long> callableTime,
                                                                 string ModuleName, string ClassName, string LemmaName) {
       if(program.reporter.AllMessages[ErrorLevel.Error].Count > 0) {
         // TODO Change logic so that the loader is responsible to ensure that the previous steps were sucessful.
@@ -150,11 +151,12 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       try {
         string toBeChecked = "*" + ModuleName + "." + ClassName + "." + LemmaName;
         DafnyOptions.O.procsToCheck.Add(toBeChecked);
+        // Console.WriteLine(">>>>>>>>>>>> Specify: " + toBeChecked);
         // Console.WriteLine("User Constrained Procs To Check?" + DafnyOptions.O.UserConstrainedProcsToCheck);
         
         // The printer is responsible for two things: It logs boogie errors and captures the counter example model.
         var errorReporter = program.reporter;
-        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter,callableName, callableInfo);
+        var printer = new ModelCapturingOutputPrinter(_logger, errorReporter,callableName, callableTime);
         ExecutionEngine.printer = printer;
         var translated = Translator.Translate(program, errorReporter, new Translator.TranslatorFlags { InsertChecksums = true });
         foreach(var (CompileName, boogieProgram) in translated) {
@@ -197,10 +199,7 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       private readonly ErrorReporter _errorReporter;
       private StringBuilder? _serializedCounterExamples;
       private List<Tuple<string, string, string> > _CallableName = new List<Tuple<string, string, string> >();
-      private List<Tuple<string, string, string> > _TimeoutCallableName = new List<Tuple<string, string, string> >();
-      private List<string> _TimeoutCallableInfo = new List<string>();
       private List<long> _CallableTime = new List<long>();
-      private readonly SemaphoreSlim _mutex = new SemaphoreSlim(1);
       private Stopwatch sw = new Stopwatch();
 
       public string? SerializedCounterExamples => _serializedCounterExamples?.ToString();
@@ -211,20 +210,9 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       }
 
       public ModelCapturingOutputPrinter(ILogger logger, ErrorReporter errorReporter, 
-                                         List<Tuple<string, string, string> > TimeoutCallableName, List<string> TimeoutCallableInfo) {
-        _logger = logger;
-        _errorReporter = errorReporter;
-        _TimeoutCallableName = TimeoutCallableName;
-        _TimeoutCallableInfo = TimeoutCallableInfo;
-      }
-
-      public ModelCapturingOutputPrinter(ILogger logger, ErrorReporter errorReporter, 
-                                         List<Tuple<string, string, string> > TimeoutCallableName, List<string> TimeoutCallableInfo, 
                                          List<Tuple<string, string, string> > CallableName, List<long> CallableTime) {
         _logger = logger;
         _errorReporter = errorReporter;
-        _TimeoutCallableName = TimeoutCallableName;
-        _TimeoutCallableInfo = TimeoutCallableInfo;
         _CallableName = CallableName;
         _CallableTime = CallableTime;
       }
@@ -245,31 +233,29 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       public void Inform(string s, TextWriter tw) {
         // Console.WriteLine(">>>>>>>>>>>>>>>> Inform: \"" +s+"\" <<<<<<<<<<<<<<<<<");
         // _mutex.Wait();
-        string pattern = @"^Verifying [A-Za-z]+\$\$(?<ModuleName>\w+).(?<ClassName>\w+).(?<CallableName>\w+) ...$";
+        _logger.LogInformation(s);
+        string pattern = @"^Verifying (?<TaskName>\w+)\$\$(?<ModuleName>\w+)\.(?<ClassName>\w+)\.(?<CallableName>\w+) \.\.\.$";
         foreach (Match match in Regex.Matches(s, pattern)){
             // Console.WriteLine(match.Value);
-            sw.Start();
             GroupCollection groups = match.Groups;
-            _TimeoutCallableName.Add(Tuple.Create<string, string, string>(groups["ModuleName"].ToString(), groups["ClassName"].ToString(), groups["CallableName"].ToString()));
+            // if(groups["TaskName"].ToString() == "CheckWellformed") return;
+            sw.Start();
             _CallableName.Add(Tuple.Create<string, string, string>(groups["ModuleName"].ToString(), groups["ClassName"].ToString(), groups["CallableName"].ToString()));
             // Console.WriteLine(">>>>>>>>>>>>>>>> Module name: " + groups["ModuleName"]);
             // Console.WriteLine(">>>>>>>>>>>>>>>> Callable name: " + groups["CallableName"]);
         }
-        if((s == "verified" || s == "timed out" || s == "error") && _TimeoutCallableName.Count - _TimeoutCallableInfo.Count == 1){
+        if((s == "verified" || s == "timed out" || s == "error") && _CallableName.Count - _CallableTime.Count == 1){
           if(sw.IsRunning){
             sw.Stop();
-            _CallableTime.Add(sw.ElapsedMilliseconds);
-            sw.Reset();
           }
           if(s == "timed out"){
-            _TimeoutCallableInfo.Add(s);
+            _CallableTime.Add(-1);
           }
           else{
-            _TimeoutCallableName.RemoveAt(_TimeoutCallableName.Count - 1);
+            _CallableTime.Add(sw.ElapsedMilliseconds);
           }
+          sw.Reset();
         }
-        // _mutex.Release();
-        _logger.LogInformation(s);
       }
 
       public void ReportBplError(IToken tok, string message, bool error, TextWriter tw, [AllowNull] string category) {
