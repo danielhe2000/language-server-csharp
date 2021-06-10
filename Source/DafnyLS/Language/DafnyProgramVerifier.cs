@@ -45,9 +45,9 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           //      A dash means write to the textwriter instead of a file.
           // https://github.com/boogie-org/boogie/blob/b03dd2e4d5170757006eef94cbb07739ba50dddb/Source/VCGeneration/Couterexample.cs#L217
           DafnyOptions.O.ModelViewFile = "-";
-          DafnyOptions.O.TimeLimit = 15;
-          DafnyOptions.O.ArithMode = 5;
-          DafnyOptions.O.DisableNLarith = true;
+          // DafnyOptions.O.TimeLimit = 15;
+          // DafnyOptions.O.ArithMode = 5;
+          // DafnyOptions.O.DisableNLarith = true;
           // DafnyOptions.O.SetZ3Option("smt.qi.profile_freq","1000");
           
           _initialized = true;

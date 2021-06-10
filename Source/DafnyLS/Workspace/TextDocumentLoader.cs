@@ -35,6 +35,9 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
     }
 
     public async Task<DafnyDocument> LoadAsync(TextDocumentItem textDocument, bool verify, CancellationToken cancellationToken) {
+      // Console.WriteLine(">>>>>>>>> Time out: " + DafnyOptions.O.TimeLimit);
+      // Console.WriteLine(">>>>>>>>> Arith Mode: " + DafnyOptions.O.ArithMode);
+      // Console.WriteLine(">>>>>>>>> Disable NLarith: " + DafnyOptions.O.DisableNLarith);
       if(verify){
         return await GenerateProgramZ3Timeout(textDocument ,cancellationToken);
       }

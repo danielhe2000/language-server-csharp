@@ -20,6 +20,11 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
     public DocumentUpdater(ILogger<DocumentUpdater> logger, IOptions<DocumentOptions> options, ITextDocumentLoader documentLoader) {
       _logger = logger;
       _options = options.Value;
+      // System.Console.WriteLine(">>>>>>>>>>>>>>> arith value: " + _options.arith);
+      // System.Console.WriteLine(">>>>>>>>>>>>>>> nonlarith value: " + _options.nonlarith);
+      DafnyOptions.O.ArithMode = _options.arith;
+      DafnyOptions.O.DisableNLarith = _options.nonlarith;
+      DafnyOptions.O.TimeLimit = _options.timeout;
       _documentLoader = documentLoader;
     }
 

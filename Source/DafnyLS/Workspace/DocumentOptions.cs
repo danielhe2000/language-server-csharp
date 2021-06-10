@@ -12,5 +12,8 @@
     /// Gets or sets when the automatic verification should be applied.
     /// </summary>
     public AutoVerification Verify { get; set; } = AutoVerification.OnChange;
+    public int arith {get; set;} = 5;
+    public int timeout {get; set;} = 5;
+    public bool nonlarith {get; set;} = true;
   }
 }

@@ -7,6 +7,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO; 
+using System;
 
 namespace Microsoft.Dafny.LanguageServer.Workspace {
   /// <summary>
@@ -33,6 +35,11 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
     ) {
       _logger = logger;
       _options = options.Value;
+      // System.Console.WriteLine(">>>>>>>>>>>>>>> arith value: " + _options.arith);
+      // System.Console.WriteLine(">>>>>>>>>>>>>>> nonlarith value: " + _options.nonlarith);
+      DafnyOptions.O.ArithMode = _options.arith;
+      DafnyOptions.O.DisableNLarith = _options.nonlarith;
+      DafnyOptions.O.TimeLimit = _options.timeout;
       _documentLoader = documentLoader;
       _documentUpdater = documentUpdater;
     }
