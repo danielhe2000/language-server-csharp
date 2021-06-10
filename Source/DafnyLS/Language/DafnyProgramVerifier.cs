@@ -45,18 +45,30 @@ namespace Microsoft.Dafny.LanguageServer.Language {
           //      A dash means write to the textwriter instead of a file.
           // https://github.com/boogie-org/boogie/blob/b03dd2e4d5170757006eef94cbb07739ba50dddb/Source/VCGeneration/Couterexample.cs#L217
           DafnyOptions.O.ModelViewFile = "-";
-          DafnyOptions.O.TimeLimit = 2;
+          DafnyOptions.O.TimeLimit = 15;
           DafnyOptions.O.ArithMode = 5;
           DafnyOptions.O.DisableNLarith = true;
-          // DafnyOptions.O.SetZ3Option("smt.qi.profile","true");
           // DafnyOptions.O.SetZ3Option("smt.qi.profile_freq","1000");
-          // DafnyOptions.O.procsToCheck.Add("*RefinementNext");
           
           _initialized = true;
           logger.LogTrace("initialized the boogie verifier...");
         }
         return new DafnyProgramVerifier(logger);
       }
+    }
+
+    public void SetZ3OutputOption(string ModuleName, string ClassName, string LemmaName){
+      if(ClassName == "") ClassName = "__default";
+      DafnyOptions.O.TurnOnZ3Profile();
+      string toBeChecked = "*" + ModuleName + "." + ClassName + "." + LemmaName;
+      DafnyOptions.O.procsToCheck.Add(toBeChecked);
+    }
+
+    public void ReleaseZ3Option(){
+      DafnyOptions.O.TurnOffZ3Profile();
+      if(DafnyOptions.O.procsToCheck.Count > 0){
+        DafnyOptions.O.procsToCheck.RemoveAt(DafnyOptions.O.procsToCheck.Count - 1);
+      } 
     }
 
     
@@ -139,7 +151,6 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       } finally {
         _mutex.Release();
       }
-      
     }
 
     public async Task<string?> VerifyAsyncRecordInfoSpecifyName(Dafny.Program program, CancellationToken cancellationToken, 
@@ -249,11 +260,11 @@ namespace Microsoft.Dafny.LanguageServer.Language {
             // Console.WriteLine(">>>>>>>>>>>>>>>> Module name: " + groups["ModuleName"]);
             // Console.WriteLine(">>>>>>>>>>>>>>>> Callable name: " + groups["CallableName"]);
         }
-        if((s == "verified" || s == "timed out" || s == "error") && _CallableName.Count - _CallableTime.Count == 1){
+        if((s == "verified" || s == "timed out" || s == "error" || s == "inconclusive") && _CallableName.Count - _CallableTime.Count == 1){
           if(sw.IsRunning){
             sw.Stop();
           }
-          if(s == "timed out"){
+          if(s == "timed out" || s == "inconclusive"){
             _CallableTime.Add(-1);
           }
           else{

@@ -5,9 +5,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.Boogie;
- using System.IO; 
+using System.IO; 
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using System;
 
 namespace Microsoft.Dafny.LanguageServer.Workspace {
@@ -34,7 +36,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
 
     public async Task<DafnyDocument> LoadAsync(TextDocumentItem textDocument, bool verify, CancellationToken cancellationToken) {
       if(verify){
-        return await GenerateProgramZOutputTest(textDocument ,cancellationToken);
+        return await GenerateProgramZ3Timeout(textDocument ,cancellationToken);
       }
       else{
         return await GenerateProgramWithoutVerify(textDocument, cancellationToken);
@@ -250,8 +252,6 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
     }  
 
     /***************   TIME OUT METHODS: *************/
-
-    
 
     private async Task<DafnyDocument> GenerateProgramWithTimeout(TextDocumentItem textDocument, CancellationToken cancellationToken){
       var errorReporter = new BuildErrorReporter();
@@ -506,7 +506,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
   
     /******************** Z3 METHODS: ***********************/
 
-    private async Task<DafnyDocument> GenerateProgramZOutputTest(TextDocumentItem textDocument, CancellationToken cancellationToken){
+    private async Task<DafnyDocument> GenerateProgramZ3OutputTest(TextDocumentItem textDocument, CancellationToken cancellationToken){
       var errorReporter = new BuildErrorReporter();
       var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
@@ -515,17 +515,53 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       TextWriter originalOut = Console.Out;
       StringWriter stringw = new StringWriter();
       Console.SetOut(stringw);
+      _verifier.SetZ3OutputOption("RefinementProof", "", "RefinementNext");
       var serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
       // DocumentPrinter.OutputErrorInfo(errorReporter);
       _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
       Console.SetOut(originalOut);
-      Console.WriteLine(">>>>>>>>>>>>>>>> Now we read the stream writer: <<<<<<<<<<<<<<");
+      Console.WriteLine(">>>>>>>>>>>>>>>> Now we print the stream writer: <<<<<<<<<<<<<<");
       Console.WriteLine(stringw.ToString());
-      Console.WriteLine(">>>>>>>>>>>>>>>> Stream writer read: <<<<<<<<<<<<<<");
+      Console.WriteLine(">>>>>>>>>>>>>>>> Stream writer printed: <<<<<<<<<<<<<<");
+      string pattern = @"\[quantifier_instances\] (?<FileName>\w+)dfy(?<CallableName>\w*)\.(?<Line>\d+):\d+ : *(?<Count>\d+) :";
+      SortedDictionary<Tuple<string, string>, int> Z3Information = new SortedDictionary<Tuple<string, string>, int>();
+      foreach (Match match in Regex.Matches(stringw.ToString(), pattern)){ 
+          GroupCollection groups = match.Groups;
+          Console.WriteLine("Filename: " + groups["FileName"].ToString()+" has count " + groups["Count"].ToString() + " at line" + groups["Line"].ToString() + " (Callable is " + groups["CallableName"].ToString() + ")");
+          var info = Tuple.Create<string, string>(groups["FileName"].ToString(), groups["Line"].ToString());
+          if(Z3Information.ContainsKey(info)){
+            Z3Information[info] += int.Parse(groups["Count"].ToString());
+          }
+          else{
+            Z3Information.Add(info, int.Parse(groups["Count"].ToString()));
+          }
+      }
+      
+      if(Z3Information.Count == 0) return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
+      
+      int MaxCount = Z3Information.Values.Max();
+      var KeyOfMax = Z3Information.FirstOrDefault(x => x.Value == MaxCount).Key;
+      Console.WriteLine("****************Time out detected!*******************");
+      Console.WriteLine("Line " + KeyOfMax.Item2 + " of file " + KeyOfMax.Item1 + ".dfy might be the cause of timeout: it's been called " + MaxCount + " times");
+      _verifier.ReleaseZ3Option();
+      /*
+      serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
+      foreach(var o in DafnyOptions.O.ProverOptions){
+        Console.WriteLine("~~~~~~~~~~~~~~" + o);
+      }
+      _verifier.SetZ3OutputOption("RefinementProof", "Test", "TimeoutTestMethod");
+      errorReporter = new BuildErrorReporter();
+      program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
+      compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
+      serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
+      foreach(var o in DafnyOptions.O.ProverOptions){
+        Console.WriteLine("~~~~~~~~~~~~~~" + o);
+      }
+      _verifier.ReleaseZ3Option();*/
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
   
-    private async Task<DafnyDocument> GenerateProgramZTimeout(TextDocumentItem textDocument, CancellationToken cancellationToken){
+    private async Task<DafnyDocument> GenerateProgramZ3Timeout(TextDocumentItem textDocument, CancellationToken cancellationToken){
       var errorReporter = new BuildErrorReporter();
       var program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
       var compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
@@ -537,16 +573,6 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       // List<int> timeoutLines = new List<int>();
       var serializedCounterExamples = await _verifier.VerifyAsyncRecordInfo(program, cancellationToken, callableName, callableTime);
       
-      /*
-      Console.WriteLine(">>>>>>>>>>>>>> Timeout Callable Name Count: " + callableName.Count + "<<<<<<<<<<<<<<");
-      Console.WriteLine(">>>>>>>>>>>>>> Timeout Callable Info Count: " + callableTime.Count + "<<<<<<<<<<<<<<");
-      for(int i = 0; i < callableName.Count; ++i){
-        string ModuleName = callableName[i].Item1;
-        string ClassName = callableName[i].Item2;
-        string LemmaName = callableName[i].Item3;
-        Console.WriteLine(">>>>>>>>>>" + ModuleName + "." + ClassName + "." + LemmaName + ": " + callableTime[i] + "ms");
-      }*/
-      
       var TimeoutFound = false;
       for(int i = 0; i < callableName.Count; ++i){
         string ModuleName = callableName[i].Item1;
@@ -554,8 +580,8 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         string LemmaName = callableName[i].Item3;
         var TargetCallable = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
         if(TargetCallable == null) continue;
+        // If there is no timeout, we store its verification time in a dictionary for publication
         if(callableTime[i] > 0){
-          // Console.WriteLine(">>>>>>>>>>" + ModuleName + "." + ClassName + "." + LemmaName + ": " + callableTime[i] + "ms");
           if(callableTotalTime.ContainsKey(TargetCallable)){
             callableTotalTime[TargetCallable] += callableTime[i];
           }
@@ -564,36 +590,59 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
           }
           continue;
         }
+        // The dictionary only stores time for none-time-out callable, so if there is a timeout, remove it from the dictionary
         else if(callableTotalTime.ContainsKey(TargetCallable)){
           callableTotalTime.Remove(TargetCallable);
         }
         TimeoutFound = true;
+        Token CallableTimeoutToken = new Token();
+        DocumentModifier.CopyToken(TargetCallable.Tok, CallableTimeoutToken);
+        errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = "This callable causes a time-out", source = MessageSource.Other});
+        
+        // First, perform search on Z3
+        TextWriter originalOut = Console.Out;
+        StringWriter stringw = new StringWriter();
+        Console.SetOut(stringw);
+        var TempErrorReporter = new BuildErrorReporter();
+        var TempProgram = await _parser.ParseAsync(textDocument, TempErrorReporter, cancellationToken);
+        var TempCompilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, TempProgram, cancellationToken);
+        _verifier.SetZ3OutputOption(ModuleName, ClassName, LemmaName);
+        var TempSerializedCounterExamples = await _verifier.VerifyAsync(TempProgram, cancellationToken);
+        _verifier.ReleaseZ3Option();
+        Console.SetOut(originalOut);
+
+        string pattern = @"\[quantifier_instances\] (?<FileName>\w+)dfy(?<CallableName>\w*)\.(?<Line>\d+):\d+ : *(?<Count>\d+) :";
+        Dictionary<Tuple<string, string>, int> Z3Information = new Dictionary<Tuple<string, string>, int>();
+        foreach (Match match in Regex.Matches(stringw.ToString(), pattern)){ 
+            GroupCollection groups = match.Groups;
+            // Console.WriteLine("Filename: " + groups["FileName"].ToString()+" has count " + groups["Count"].ToString() + " at line" + groups["Line"].ToString() + " (Callable is " + groups["CallableName"].ToString() + ")");
+            var info = Tuple.Create<string, string>(groups["FileName"].ToString(), groups["Line"].ToString());
+            if(Z3Information.ContainsKey(info)){
+              Z3Information[info] += int.Parse(groups["Count"].ToString());
+            }
+            else{
+              Z3Information.Add(info, int.Parse(groups["Count"].ToString()));
+            }
+        }
+
+        if(Z3Information.Count != 0){
+          int MaxCount = Z3Information.Values.Max();
+          var KeyOfMax = Z3Information.FirstOrDefault(x => x.Value == MaxCount).Key;
+          string m = "Line " + KeyOfMax.Item2 + " of file " + KeyOfMax.Item1 + ".dfy might be the cause of timeout: it's been called " + MaxCount + " times";
+          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = m, source = MessageSource.Other});
+          continue;
+        }
+
+        // If Z3 cannot provide useful information, we then perform binary search
         int begin = 0;    // Beginning of the target search range
         int end = DocumentPrinter.GetStatementCount(program, ModuleName, ClassName, LemmaName);      // End of the target search range
         if(end == 0){
-          // Console.WriteLine("The timeout lemma has no body / the timeout callable is not a lemma");
-          // var CallableRange = TargetCallable.Tok.GetLspRange();
-          Token TimeoutToken = new Token();
-          DocumentModifier.CopyToken(TargetCallable.Tok, TimeoutToken);
-          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "This callable causes a time-out", source = MessageSource.Other});
           continue;
         }
-        // Console.WriteLine(">>>>>>>>>>> Current Lemma "+LemmaName + " has #statement " + end);
         while(begin < end){
           int middle = (begin + end) / 2;
           var TimeoutResultTask = TruncateAndCheckTimeOut(textDocument, middle, ModuleName, LemmaName, ClassName, cancellationToken);
           bool NoTimeout = await TimeoutResultTask;
-          /*
-          // Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Current middle: " + middle + "<<<<<<<<<<<<<<<<<<<<<<<<");
-          List<Tuple<string, string, string> > TempCallableName = new List<Tuple<string, string, string> >();
-          List<long> TempCallableInfo = new List<long>();
-          var TempErrorReporter = new BuildErrorReporter();
-          var TempProgram = await _parser.ParseAsync(textDocument, TempErrorReporter, cancellationToken);
-          var TempCompilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, TempProgram, cancellationToken);
-          DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,LemmaName,ClassName,ModuleName,middle);
-          // Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, ClassName, LemmaName));
-          var temp = await _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, cancellationToken, TempCallableName, TempCallableInfo, ModuleName,ClassName,LemmaName);
-          // Console.WriteLine(">>>>>>>>>>> TempCallableInfo Size" + TempCallableInfo.Count);*/
           if(NoTimeout){
             begin = middle + 1;
           }
@@ -603,24 +652,20 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         }
         int TargetLine = begin - 1;
         var Target = DocumentPrinter.GetStatement(program, ModuleName, ClassName, LemmaName,TargetLine);
-        // OmniSharp.Extensions.LanguageServer.Protocol.Models.Range Range;
         if(Target != null){
-          // Range = Target.Tok.GetLspRange();
           Token TimeoutToken = new Token();
           DocumentModifier.CopyToken(Target.Tok, TimeoutToken);
           errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "This line causes a time-out", source = MessageSource.Other});
         }
         else{
           var TargetLemma = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
-          // Range = TargetLemma.Tok.GetLspRange();
           Token TimeoutToken = new Token();
           DocumentModifier.CopyToken(TargetLemma.Tok, TimeoutToken);
           errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "The post-condition of this lemma causes a time-out", source = MessageSource.Other});
         }
-        // Console.WriteLine("~~~~~~~~~~~~~ Module " + ModuleName + ", Lemma: " + LemmaName + " timeout range: " + Range.Start + " to " + Range.End + " ~~~~~~~~~~");
       }
 
-      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      // Now, we report verification time of each callable
       foreach(var item in callableTotalTime){
         var TargetCallable = item.Key;
         var Time = item.Value;
@@ -629,7 +674,6 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         errorReporter.AllMessages[ErrorLevel.Info].Add(new ErrorMessage {token = TimeoutToken, message = Time + " ms spent on verifying this callable", source = MessageSource.Other});
       }
       _notificationPublisher.Completed(textDocument, (serializedCounterExamples == null) && (!TimeoutFound));
-      // DocumentPrinter.OutputErrorInfo(errorReporter);
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
     /**/

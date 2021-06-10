@@ -19,6 +19,7 @@ namespace Microsoft.Dafny.LanguageServer.IntegrationTest.Synchronization {
   [TestClass]
   public class TimeoutTest : DafnyLanguageServerTestBase {
     private ILanguageClient _client;
+    private static readonly string TestFilePath = Path.Combine(Directory.GetCurrentDirectory(), "MyTest", "TestFiles", "testFile.dfy");
     private const int MaxTestExecutionTimeMs = 120000;
     private TestDiagnosticReceiver _diagnosticReceiver;
     private IDictionary<string, string> _configuration;
@@ -79,9 +80,33 @@ module module1 {
     [TestMethod]
     [Timeout(MaxTestExecutionTimeMs)]
     public async Task TimeoutWithBoogieTest() {
-      var filePath = Path.Combine("MyTest", "TestFiles", "TimeoutsModified.dfy");
+      var filePath = Path.Combine("MyTest", "TestFiles", "raftTimesOut.dfy");
       var source = await File.ReadAllTextAsync(filePath, CancellationToken);
       var documentItem = CreateTestDocument(source);
+      await SetUp(new Dictionary<string, string>() {
+        { $"{DocumentOptions.Section}:{nameof(DocumentOptions.Verify)}", nameof(AutoVerification.OnSave) }
+      });
+      _client.OpenDocument(documentItem);
+      var changeReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
+      _client.SaveDocument(documentItem);
+      var saveReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
+      var saveDiagnostics = saveReport.Diagnostics.ToArray();
+      Console.WriteLine("Number of errors: " + saveDiagnostics.Length);
+      for(int i = 0; i < saveDiagnostics.Length; ++i){
+        var Diagnostic = saveDiagnostics[i];
+        if(Diagnostic.Severity != DiagnosticSeverity.Error) continue;
+        Console.WriteLine(Diagnostic.Message);
+        Console.WriteLine(Diagnostic.Range.Start);
+        Console.WriteLine(Diagnostic.Range.End);
+      }
+    }
+
+    [TestMethod]
+    [Timeout(MaxTestExecutionTimeMs)]
+    public async Task TimeoutCrossFileTest() {
+      var filePath = Path.Combine("MyTest", "TestFiles", "file3.dfy");
+      var source = await File.ReadAllTextAsync(filePath, CancellationToken);
+      var documentItem = CreateTestDocument(source, TestFilePath);
       await SetUp(new Dictionary<string, string>() {
         { $"{DocumentOptions.Section}:{nameof(DocumentOptions.Verify)}", nameof(AutoVerification.OnSave) }
       });
