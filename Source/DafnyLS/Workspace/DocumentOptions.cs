@@ -13,7 +13,7 @@
     /// </summary>
     public AutoVerification Verify { get; set; } = AutoVerification.OnChange;
     public int arith {get; set;} = 5;
-    public int timeout {get; set;} = 5;
-    public bool nonlarith {get; set;} = true;
+    public int timeout {get; set;} = 2;
+    public bool nonlarith {get; set;} = false;
   }
 }

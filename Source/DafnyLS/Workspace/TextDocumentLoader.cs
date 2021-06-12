@@ -613,7 +613,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         var TempSerializedCounterExamples = await _verifier.VerifyAsync(TempProgram, cancellationToken);
         _verifier.ReleaseZ3Option();
         Console.SetOut(originalOut);
-
+        // Console.WriteLine(stringw.ToString());
         string pattern = @"\[quantifier_instances\] (?<FileName>\w+)dfy(?<CallableName>\w*)\.(?<Line>\d+):\d+ : *(?<Count>\d+) :";
         Dictionary<Tuple<string, string>, int> Z3Information = new Dictionary<Tuple<string, string>, int>();
         foreach (Match match in Regex.Matches(stringw.ToString(), pattern)){ 
@@ -627,19 +627,19 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
               Z3Information.Add(info, int.Parse(groups["Count"].ToString()));
             }
         }
-
         if(Z3Information.Count != 0){
           int MaxCount = Z3Information.Values.Max();
           var KeyOfMax = Z3Information.FirstOrDefault(x => x.Value == MaxCount).Key;
           string m = "Line " + KeyOfMax.Item2 + " of file " + KeyOfMax.Item1 + ".dfy might be the cause of timeout: it's been called " + MaxCount + " times";
           errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = m, source = MessageSource.Other});
-          continue;
+          if(MaxCount > 10000) continue;
         }
-
+        if((TargetCallable.WhatKind != "lemma")) continue;
         // If Z3 cannot provide useful information, we then perform binary search
         int begin = 0;    // Beginning of the target search range
         int end = DocumentPrinter.GetStatementCount(program, ModuleName, ClassName, LemmaName);      // End of the target search range
         if(end == 0){
+          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = "The post-condition of this lemma causes a time-out", source = MessageSource.Other});
           continue;
         }
         while(begin < end){
@@ -661,9 +661,9 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
           errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "This line causes a time-out", source = MessageSource.Other});
         }
         else{
-          var TargetLemma = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
+          // var TargetLemma = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
           Token TimeoutToken = new Token();
-          DocumentModifier.CopyToken(TargetLemma.Tok, TimeoutToken);
+          DocumentModifier.CopyToken(TargetCallable.Tok, TimeoutToken);
           errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "The post-condition of this lemma causes a time-out", source = MessageSource.Other});
         }
       }

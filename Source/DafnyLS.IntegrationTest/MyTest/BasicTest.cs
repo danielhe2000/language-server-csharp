@@ -241,21 +241,19 @@ module module1 {
     [Timeout(MaxTestExecutionTimeMs)]
     public async Task ChangeConfigTest() {
       var source = @"
-module module1 {
-    lemma foo() {
-        assert false;
-        assert 1 == 1;
-        assert true;
-        assert 2 == 2;
-        assert true;
-        assert 3 == 3;
-    }
+module M
+{
+  lemma Test(one: int, forty_two: int)
+    requires forty_two == one * forty_two
+    ensures  false
+  {
+  }
 }".Trim();
     //var documentItem = await CreateTextDocumentFromFileAsync("GenericSort.dfy");
       var documentItem = CreateTestDocument(source);
       Dictionary<string, string> config = new Dictionary<string, string>();
       config.Add($"{DocumentOptions.Section}:{nameof(DocumentOptions.Verify)}", nameof(AutoVerification.OnSave));
-      config.Add($"{DocumentOptions.Section}:arith", "4");
+      config.Add($"{DocumentOptions.Section}:arith", "10");
       config.Add($"{DocumentOptions.Section}:nonlarith", "false");
       config.Add($"{DocumentOptions.Section}:timeout", "2");
       await SetUp(config);
