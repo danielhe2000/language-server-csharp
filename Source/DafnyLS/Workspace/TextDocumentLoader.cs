@@ -615,27 +615,49 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         Console.SetOut(originalOut);
         // Console.WriteLine(stringw.ToString());
         string pattern = @"\[quantifier_instances\] (?<FileName>\w+)dfy(?<CallableName>\w*)\.(?<Line>\d+):\d+ : *(?<Count>\d+) :";
-        Dictionary<Tuple<string, string>, int> Z3Information = new Dictionary<Tuple<string, string>, int>();
+        string patternPrelude = @"\[quantifier_instances\] DafnyPreludebpl\.(?<Line>\d+):\d+ : *(?<Count>\d+) :";
+        Dictionary<Tuple<string, string>, long> Z3Information = new Dictionary<Tuple<string, string>, long>();
+        Dictionary<int, long> PreludeInformation = new Dictionary<int, long>();
         foreach (Match match in Regex.Matches(stringw.ToString(), pattern)){ 
-            GroupCollection groups = match.Groups;
-            // Console.WriteLine("Filename: " + groups["FileName"].ToString()+" has count " + groups["Count"].ToString() + " at line" + groups["Line"].ToString() + " (Callable is " + groups["CallableName"].ToString() + ")");
-            var info = Tuple.Create<string, string>(groups["FileName"].ToString(), groups["Line"].ToString());
-            if(Z3Information.ContainsKey(info)){
-              Z3Information[info] += int.Parse(groups["Count"].ToString());
-            }
-            else{
-              Z3Information.Add(info, int.Parse(groups["Count"].ToString()));
-            }
+          GroupCollection groups = match.Groups;
+          // Console.WriteLine("Filename: " + groups["FileName"].ToString()+" has count " + groups["Count"].ToString() + " at line" + groups["Line"].ToString() + " (Callable is " + groups["CallableName"].ToString() + ")");
+          var info = Tuple.Create<string, string>(groups["FileName"].ToString(), groups["Line"].ToString());
+          if(Z3Information.ContainsKey(info)){
+            Z3Information[info] += long.Parse(groups["Count"].ToString());
+          }
+          else{
+            Z3Information.Add(info, long.Parse(groups["Count"].ToString()));
+          }
         }
+        foreach (Match match in Regex.Matches(stringw.ToString(), patternPrelude)){
+          GroupCollection groups = match.Groups;
+          int lineNum = int.Parse(groups["Line"].ToString());
+          long count = long.Parse(groups["Count"].ToString());
+          if(PreludeInformation.ContainsKey(lineNum)){
+            PreludeInformation[lineNum] += count;
+          }
+          else{
+            PreludeInformation.Add(lineNum, count);
+          }
+        }
+        bool Z3InformationUseful = false;
         if(Z3Information.Count != 0){
-          int MaxCount = Z3Information.Values.Max();
+          long MaxCount = Z3Information.Values.Max();
           var KeyOfMax = Z3Information.FirstOrDefault(x => x.Value == MaxCount).Key;
           string m = "Line " + KeyOfMax.Item2 + " of file " + KeyOfMax.Item1 + ".dfy might be the cause of timeout: it's been called " + MaxCount + " times";
           errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = m, source = MessageSource.Other});
-          if(MaxCount > 10000) continue;
+          if(MaxCount > 10000) Z3InformationUseful = true;
         }
-        if((TargetCallable.WhatKind != "lemma")) continue;
+        if(PreludeInformation.Count != 0){
+          long MaxCount = PreludeInformation.Values.Max();
+          int KeyOfMax = PreludeInformation.FirstOrDefault(x => x.Value == MaxCount).Key;
+          string m = "Line " + KeyOfMax + " of DafnyPrelude.bpl might be the cause of timeout: it's been called " + MaxCount + " times";
+          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = m, source = MessageSource.Other});
+          if(MaxCount > 10000) Z3InformationUseful = true;
+        }
+        if(Z3InformationUseful) continue;
         // If Z3 cannot provide useful information, we then perform binary search
+        if((TargetCallable.WhatKind != "lemma")) continue;
         int begin = 0;    // Beginning of the target search range
         int end = DocumentPrinter.GetStatementCount(program, ModuleName, ClassName, LemmaName);      // End of the target search range
         if(end == 0){

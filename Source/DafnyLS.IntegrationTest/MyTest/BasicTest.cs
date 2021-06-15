@@ -274,6 +274,54 @@ module M
         Console.WriteLine(Diagnostic.Range.End);
       }
     }
+
+        [TestMethod]
+    [Timeout(MaxTestExecutionTimeMs)]
+    public async Task methodTest() {
+      var source = @"
+module M
+{
+  method Test(a: int, b: int) returns(c: int)
+    requires a > 0 && b > 0
+    ensures  c > 0
+  {
+    var tempa := a*5;
+    var tempb := b*3;
+    c := a*b;
+    assert c > 0;
+    return;
+    return c;
+  }
+}".Trim();
+    //var documentItem = await CreateTextDocumentFromFileAsync("GenericSort.dfy");
+      var documentItem = CreateTestDocument(source);
+      Dictionary<string, string> config = new Dictionary<string, string>();
+      config.Add($"{DocumentOptions.Section}:{nameof(DocumentOptions.Verify)}", nameof(AutoVerification.OnSave));
+      // config.Add($"{DocumentOptions.Section}:arith", "10");
+      // config.Add($"{DocumentOptions.Section}:nonlarith", "false");
+      // config.Add($"{DocumentOptions.Section}:timeout", "2");
+      await SetUp(config);
+      _client.OpenDocument(documentItem);
+      var changeReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
+      var changeDiagnostics = changeReport.Diagnostics.ToArray();
+      for(int i = 0; i < changeDiagnostics.Length; ++i){
+        var Diagnostic = changeDiagnostics[i];
+        Console.WriteLine(Diagnostic.Message);
+        Console.WriteLine(Diagnostic.Range.Start);
+        Console.WriteLine(Diagnostic.Range.End);
+      }
+      Assert.AreEqual(0, changeDiagnostics.Length);
+      _client.SaveDocument(documentItem);
+      var saveReport = await _diagnosticReceiver.AwaitNextPublishDiagnostics(CancellationToken);
+      var saveDiagnostics = saveReport.Diagnostics.ToArray();
+      Console.WriteLine("Number of errors: " + saveDiagnostics.Length);
+      for(int i = 0; i < saveDiagnostics.Length; ++i){
+        var Diagnostic = saveDiagnostics[i];
+        Console.WriteLine(Diagnostic.Message);
+        Console.WriteLine(Diagnostic.Range.Start);
+        Console.WriteLine(Diagnostic.Range.End);
+      }
+    }
     
     public class TestDiagnosticReceiver {
       private readonly SemaphoreSlim _availableDiagnostics = new SemaphoreSlim(0);

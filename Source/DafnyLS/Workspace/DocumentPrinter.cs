@@ -17,7 +17,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 Indent += "  ";
             }
             Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " type " + GetStatementType(Stm));
-            // Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " #expression " + SubExps.Count());
+            //Console.WriteLine("       " + Indent + Parent + ", statement " + StmtCount + " #expression " + SubExps.Count());
             /*
             if(SubExps.Count() > 0){
                 var ExpsCount = 0;
@@ -54,6 +54,15 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                 if(callable.WhatKind == "lemma"){
                     var LemmaCallable = (Lemma)callable;
                     var Body = LemmaCallable.methodBody;
+                    if(Body == null) return;
+                    Console.WriteLine("     Callable "+CallableCount+" #statement " + Body.Body.Count);
+                    for(int i = 0; i < Body.Body.Count; ++ i){
+                        PrintStatementInfo(Body.Body[i], "Callable "+CallableCount, i, 0);
+                    }
+                }
+                if(callable.WhatKind == "method"){
+                    var MethodCallable = (Method)callable;
+                    var Body = MethodCallable.methodBody;
                     if(Body == null) return;
                     Console.WriteLine("     Callable "+CallableCount+" #statement " + Body.Body.Count);
                     for(int i = 0; i < Body.Body.Count; ++ i){
