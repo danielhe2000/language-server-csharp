@@ -101,6 +101,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
         }
 
         public static string GetStatementType(Statement stmt){
+            if(stmt == null) return "null";
             if (stmt is AssertStmt) {
                 return "Assert Statement";
             } else if (stmt is ExpectStmt) {
@@ -166,11 +167,19 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             foreach(ModuleDefinition module in program.ModuleSigs.Keys){
                 if(module.FullName != ModuleName) continue;
                 foreach(ICallable callable in module.CallGraph.vertices.Keys){
-                    if(callable.WhatKind != "lemma" || callable.FullSanitizedName != FullName) continue;
-                    var LemmaCallable = (Lemma)callable;
-                    var Body = LemmaCallable.Body.Body;
-                    if(Body == null) return 0;
-                    return GetStatementCountHelper(Body);
+                    if(callable.FullSanitizedName != FullName) continue;
+                    if(callable.WhatKind == "lemma"){
+                        var LemmaCallable = (Lemma)callable;
+                        var Body = LemmaCallable.Body.Body;
+                        if(Body == null) return 0;
+                        return GetStatementCountHelper(Body);
+                    }
+                    else if(callable.WhatKind == "method"){
+                        var MethodCallable = (Method)callable;
+                        var Body = MethodCallable.Body.Body;
+                        if(Body == null) return 0;
+                        return GetStatementCountHelper(Body);
+                    }
                 }
             }
             return 0;
@@ -181,6 +190,10 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             foreach(var Stm in Body){
                 if(Stm is VarDeclPattern) continue;
                 if(Stm is ForallStmt){
+                    result += 1;
+                    result += GetStatementCountHelper(Stm.SubStatements);
+                }
+                else if(Stm is AssertStmt){
                     result += 1;
                     result += GetStatementCountHelper(Stm.SubStatements);
                 }
@@ -202,11 +215,19 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             foreach(ModuleDefinition module in program.ModuleSigs.Keys){
                 if(module.FullName != ModuleName) continue;
                 foreach(ICallable callable in module.CallGraph.vertices.Keys){
-                    if(callable.WhatKind != "lemma" || callable.FullSanitizedName != FullName) continue;
-                    var LemmaCallable = (Lemma)callable;
-                    var Body = LemmaCallable.Body.Body;
-                    var End = GetStatementHelper(Body, Location, out var Result);
-                    return Result;
+                    if(callable.FullSanitizedName != FullName) continue;
+                    if(callable.WhatKind == "lemma"){
+                        var LemmaCallable = (Lemma)callable;
+                        var Body = LemmaCallable.Body.Body;
+                        var End = GetStatementHelper(Body, Location, out var Result);
+                        return Result;
+                    }
+                    else if(callable.WhatKind == "method"){
+                        var MethodCallable = (Method)callable;
+                        var Body = MethodCallable.Body.Body;
+                        var End = GetStatementHelper(Body, Location, out var Result);
+                        return Result;
+                    }
                 }
             }
             return null;
@@ -229,6 +250,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
         
         private static int GetStatementHelper(IEnumerable<Statement> Body, int Location, out Statement Result){
             Result = null;
+            if(Body == null) return Location;
             foreach(var Stm in Body){
                 if(Stm is VarDeclPattern) continue;
                 if(Location == 0) {
@@ -243,10 +265,8 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
                         return 0;
                     }
                 }
-                if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt || Stm is MatchStmt){
-                    if(Stm is ForallStmt){
-                        --Location;
-                    }
+                if(Stm is BlockStmt || Stm is IfStmt || Stm is WhileStmt || Stm is ForallStmt || Stm is NestedMatchStmt || Stm is MatchStmt || Stm is AssertStmt){
+                    if(Stm is ForallStmt || Stm is AssertStmt) --Location;
                     Location = GetStatementHelper(Stm.SubStatements, Location, out Result);
                     if(Location == 0 && Result != null){
                         return 0;
@@ -258,8 +278,5 @@ namespace Microsoft.Dafny.LanguageServer.Workspace{
             }
             return Location;
         }
-
-        
-
     }
 }

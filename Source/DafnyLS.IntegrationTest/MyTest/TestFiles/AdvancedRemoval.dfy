@@ -22,7 +22,10 @@ module module1 {
                     assert true;
                 }
                 else{
-                    assert value != 3;
+                    assert value == 3 by{
+                        assert false;
+                        assert true;
+                    }
                 }
             }
             case OtherStep(key, value) =>{

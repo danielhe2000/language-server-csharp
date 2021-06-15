@@ -288,9 +288,11 @@ module M
     var tempa := a*5;
     var tempb := b*3;
     c := a*b;
-    assert c > 0;
+    assert c > 0 by{
+      assert false;
+      assert true;
+    }
     return;
-    return c;
   }
 }".Trim();
     //var documentItem = await CreateTextDocumentFromFileAsync("GenericSort.dfy");

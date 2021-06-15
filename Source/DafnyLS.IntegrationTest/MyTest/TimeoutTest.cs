@@ -80,7 +80,7 @@ module module1 {
     [TestMethod]
     [Timeout(MaxTestExecutionTimeMs)]
     public async Task TimeoutWithBoogieTest() {
-      var filePath = Path.Combine("MyTest", "TestFiles", "raftTimesOut.dfy");
+      var filePath = Path.Combine("MyTest", "TestFiles", "TimeoutsModified.dfy");
       var source = await File.ReadAllTextAsync(filePath, CancellationToken);
       var documentItem = CreateTestDocument(source);
       await SetUp(new Dictionary<string, string>() {

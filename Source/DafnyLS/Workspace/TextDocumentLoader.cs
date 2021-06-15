@@ -80,26 +80,26 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       var symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       // Verify 
       _notificationPublisher.Started(textDocument);
-      DocumentModifier.RemoveLemmaLinesFlattened(program, "foo", "", "module1", 2);
+      DocumentModifier.RemoveCallableLinesFlattened(program, "Test", "", "M", 4);
       var serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
       // DocumentPrinter.OutputProgramInfo(program);
-      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      DocumentPrinter.OutputErrorInfo(errorReporter);
 
       errorReporter = new BuildErrorReporter();
       program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
       compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
       symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
       serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
-      var Stm = DocumentPrinter.GetStatement(program, "module1", "", "foo", 2);
+      var Stm = DocumentPrinter.GetStatement(program, "M", "", "Test", 4);
       if(Stm == null){
-        // Console.WriteLine("????????? Can't be null?!");
+        Console.WriteLine("????????? Can't be null?!");
       }
       else{
-        // Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> " + Stm.Tok.GetLspRange().Start + " to " + Stm.Tok.GetLspRange().End);
+        Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> " + Stm.Tok.GetLspRange().Start + " to " + Stm.Tok.GetLspRange().End);
       }
       _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
       // DocumentPrinter.OutputProgramInfo(program);
-      // DocumentPrinter.OutputErrorInfo(errorReporter);
+      DocumentPrinter.OutputErrorInfo(errorReporter);
 
       return new DafnyDocument(textDocument, errorReporter, program, symbolTable, serializedCounterExamples);
     }
@@ -216,7 +216,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         program = await _parser.ParseAsync(textDocument, errorReporter, cancellationToken);
         compilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, program, cancellationToken);
         symbolTable = _symbolTableFactory.CreateFrom(program, compilationUnit, cancellationToken);
-        DocumentModifier.RemoveLemmaLinesFlattened(program, LemmaName, ClassName, ModuleName, middle);
+        DocumentModifier.RemoveCallableLinesFlattened(program, LemmaName, ClassName, ModuleName, middle);
         serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
         if(errorReporter.AllMessages[ErrorLevel.Error].Count == 0){
           begin = middle + 1;
@@ -245,9 +245,9 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
         Location = TargetLemma.Tok.GetLspPosition();
         Range = TargetLemma.Tok.GetLspRange();
       }
-      // Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Final conclusion: assertion failure of statement #" + (begin - 1) + "<<<<<<<<<<<<<<<<<<<<<<<<");
-      // Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Assertion failure Location: " + Location);
-      // Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Assertion failure Range: " + Range.Start + " to " + Range.End);
+      Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Final conclusion: assertion failure of statement #" + (begin - 1) + "<<<<<<<<<<<<<<<<<<<<<<<<");
+      Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Assertion failure Location: " + Location);
+      Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>> Assertion failure Range: " + Range.Start + " to " + Range.End);
 
       serializedCounterExamples = await _verifier.VerifyAsync(program, cancellationToken);
       _notificationPublisher.Completed(textDocument, serializedCounterExamples == null);
@@ -500,7 +500,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       // Console.WriteLine(">>>>> Parse Start: " + Start);
       var TempCompilationUnit = await _symbolResolver.ResolveSymbolsAsync(textDocument, TempProgram, cancellationToken);
       // Console.WriteLine(">>>>> Resolve Start: " + Start);
-      DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,LemmaName,ClassName,ModuleName,Start);
+      DocumentModifier.RemoveCallableLinesFlattened(TempProgram,LemmaName,ClassName,ModuleName,Start);
       // Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, ClassName, LemmaName));
       var temp = await _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, cancellationToken, TempCallableName, TempCallableInfo, ModuleName,ClassName,LemmaName);
       // Console.WriteLine(">>>>>>>>>>> TempCallableInfo Size" + TempCallableInfo.Count);
@@ -655,13 +655,13 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
           errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = m, source = MessageSource.Other});
           if(MaxCount > 10000) Z3InformationUseful = true;
         }
-        if(Z3InformationUseful) continue;
+        if(Z3InformationUseful) continue; 
         // If Z3 cannot provide useful information, we then perform binary search
-        if((TargetCallable.WhatKind != "lemma")) continue;
+        if(TargetCallable.WhatKind != "lemma" && TargetCallable.WhatKind != "method") continue;
         int begin = 0;    // Beginning of the target search range
         int end = DocumentPrinter.GetStatementCount(program, ModuleName, ClassName, LemmaName);      // End of the target search range
         if(end == 0){
-          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = "The post-condition of this lemma causes a time-out", source = MessageSource.Other});
+          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = CallableTimeoutToken, message = "The pre/post-condition of this lemma causes a time-out", source = MessageSource.Other});
           continue;
         }
         while(begin < end){
@@ -676,6 +676,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
           }
         }
         int TargetLine = begin - 1;
+        // Console.WriteLine(">>>>>>>>. Target Line: " + TargetLine + "<<<<<<<<<<");
         var Target = DocumentPrinter.GetStatement(program, ModuleName, ClassName, LemmaName,TargetLine);
         if(Target != null){
           Token TimeoutToken = new Token();
@@ -686,7 +687,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
           // var TargetLemma = DocumentPrinter.GetCallable(program, ModuleName, ClassName, LemmaName);
           Token TimeoutToken = new Token();
           DocumentModifier.CopyToken(TargetCallable.Tok, TimeoutToken);
-          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "The post-condition of this lemma causes a time-out", source = MessageSource.Other});
+          errorReporter.AllMessages[ErrorLevel.Error].Add(new ErrorMessage {token = TimeoutToken, message = "The pre/post-condition of this callable causes a time-out", source = MessageSource.Other});
         }
       }
 
@@ -755,7 +756,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       Console.WriteLine(">>>>> Parse Start: " + _middle1);
       var TempCompilationUnit = _symbolResolver.ResolveSymbolsAsync(_textDocument, TempProgram, _cancellationToken).Result;
       Console.WriteLine(">>>>> Resolve Start: " + _middle1);
-      DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,_LemmaName,_ClassName,_ModuleName,_middle1);
+      DocumentModifier.RemoveCallableLinesFlattened(TempProgram,_LemmaName,_ClassName,_ModuleName,_middle1);
       // Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, ClassName, LemmaName));
       var temp = _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, _cancellationToken, TempCallableName, TempCallableInfo, _ModuleName,_ClassName,_LemmaName).Result;
       result1 = (TempCallableInfo.Count == 0 || TempCallableInfo[0] > 0);
@@ -770,7 +771,7 @@ namespace Microsoft.Dafny.LanguageServer.Workspace {
       Console.WriteLine(">>>>> Parse Start: " + _middle2);
       var TempCompilationUnit = _symbolResolver.ResolveSymbolsAsync(_textDocument, TempProgram, _cancellationToken).Result;
       Console.WriteLine(">>>>> Resolve Start: " + _middle2);
-      DocumentModifier.RemoveLemmaLinesFlattened(TempProgram,_LemmaName,_ClassName,_ModuleName,_middle2);
+      DocumentModifier.RemoveCallableLinesFlattened(TempProgram,_LemmaName,_ClassName,_ModuleName,_middle2);
       // Console.WriteLine(">>>>>>>>>>> After truncating, current lemma "+LemmaName + " has #statement " + DocumentPrinter.GetStatementCount(TempProgram, ModuleName, ClassName, LemmaName));
       var temp = _verifier.VerifyAsyncRecordInfoSpecifyName(TempProgram, _cancellationToken, TempCallableName, TempCallableInfo, _ModuleName,_ClassName,_LemmaName).Result;
       result2 = (TempCallableInfo.Count == 0 || TempCallableInfo[0] > 0);

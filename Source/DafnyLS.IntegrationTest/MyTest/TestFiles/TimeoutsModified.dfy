@@ -463,9 +463,10 @@ module RefinementProof{
       //reveal_MapsAreFull();
     }
 
-    method TimeoutTestMethod(constants:Constants, state:Variables, state':Variables, id:HostId, a:NetAction<M>)
+    method TimeoutTestMethod(constants:Constants, state:Variables, state':Variables, id:HostId, a:NetAction<M>) returns(result: bool)
       requires Inv(constants, state)
       requires NextStep(constants, state, state', id, a, Host.ReceiveShardStep())
+      ensures result == true;
     {
       var maps := LiveMaps(constants, state);
       var maps' := LiveMaps(constants, state');
@@ -476,7 +477,15 @@ module RefinementProof{
         var src := if oldSrc == MessageOwner(a.rcv.value) then HostOwner(id) else oldSrc;
         assert src in maps' && key in maps'[src];
       }
-      assert MapsAreFull(LiveMaps(constants, state'));
+      assert MapsAreFull(LiveMaps(constants, state')) by{
+        assert true;
+        var a := 1;
+        assert a == 2;
+        assert MapsAreFull(LiveMaps(constants, state')) by{
+          assert a == 1;
+        }
+      }
+      result := true;
       assert true;
       assert false;
       //reveal_MapsAreFull();
